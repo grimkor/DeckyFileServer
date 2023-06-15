@@ -1,7 +1,7 @@
 {
-  "name": "decky-plugin-template",
+  "name": "decky-file-server",
   "version": "0.0.1",
-  "description": "A template to quickly create decky plugins from scratch, based on TypeScript and webpack",
+  "description": "plugin that allows you to quickly browse to files on your steam deck from a browser on another device.",
   "scripts": {
     "build": "shx rm -rf dist && rollup -c",
     "watch": "rollup -c -w",
@@ -18,8 +18,8 @@
     "steam-deck",
     "deck"
   ],
-  "author": "Jonas Dellinger <jonas@dellinger.dev>",
-  "license": "BSD-3-Clause",
+  "author": "Grimbakor",
+  "license": "GNU GPLv3",
   "bugs": {
     "url": "https://github.com/SteamDeckHomebrew/decky-plugin-template/issues"
   },
