@@ -9,7 +9,7 @@ base_dir = os.path.dirname(os.path.abspath(__file__))
 class MyHandler(server.SimpleHTTPRequestHandler):
     share_folder = "/home/decky"
     value = [0]
-    web_static_path = os.path.join(base_dir, "dist")
+    web_static_path = os.path.join(base_dir, "www")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=self.web_static_path, **kwargs)
