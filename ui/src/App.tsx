@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import './App.css'
 import folderLogo from '/folder.svg'
 import fileLogo from '/file.svg'
@@ -42,16 +42,26 @@ function App() {
     const [showHiddenFiles, setShowHiddenFiles] = useState(false);
     const [sortAToZ, setSortAToZ] = useState(true);
 
+    const handleBack = useCallback(() => setPath(path.slice(0, -1)), [path]);
+
     useEffect(() => {
         const getData = async () => {
-            const response = await fetch(`/api/browse/${path.join('/')}`);
+            try {
+                const response = await fetch(`/api/browse/${path.join('/')}`);
             if (response.ok) {
                 setDirectory(await response.json());
+            }
+            else {
+                handleBack();
+            }
+            } catch(e) {
+                handleBack();
+                console.error(e);
             }
         }
         getData()
         scrollTo(0, 0);
-    }, [path])
+    }, [handleBack, path])
 
 
     const handleClick = (name: string, isDir: boolean) => () => {
@@ -79,7 +89,7 @@ function App() {
     return (
         <div className={"container"}>
             <div className={"menu"}>
-                {path.length ? <div className={"back-button"} onClick={() => setPath(path.slice(0, -1))}>
+                {path.length ? <div className={"back-button"} onClick={handleBack}>
                     <img src={backLogo} className={"file-icon_img"}/>
                 </div> : <div/>}
                 <div id={"menu-button"} className={"menu-button"} onClick={() => setShowMenu(true)}>

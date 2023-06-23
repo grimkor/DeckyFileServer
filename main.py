@@ -125,7 +125,7 @@ class Plugin:
                 self.web_process = multiprocessing.Process(target=start_file_server, args=(self.last_called, error_event, error_text))
                 self.web_process.daemon = True
                 self.web_process.start()
-                error_event.wait(timeout=5)
+                error_event.wait(timeout=2)
                 await Plugin.set_error(self, None)
                 if error_event.is_set():
                     await Plugin.set_error(self, error_text[0])
@@ -171,6 +171,13 @@ class Plugin:
         decky_plugin.logger.info(f"[set_error]: {error}")
         self.error[0] = error
 
+    async def get_accepted_warning(self):
+        return settings.getSetting("ACCEPTED_WARNING", False)
+
+    async def accept_warning(self):
+        decky_plugin.logger.info(f"[accept_warning]")
+        settings.setSetting("ACCEPTED_WARNING", True)
+
     async def get_ip_address(self):
         return socket.gethostbyname(socket.gethostname())
 
@@ -181,6 +188,7 @@ class Plugin:
             'port': await Plugin.get_port(self),
             'ip_address': await Plugin.get_ip_address(self),
             'error': await Plugin.get_error(self),
+            'accepted_warning': await Plugin.get_accepted_warning(self),
         }
 
     async def set_status(self, status):
