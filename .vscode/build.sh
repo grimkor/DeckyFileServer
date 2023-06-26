@@ -5,12 +5,16 @@ printf "Please input sudo password to proceed.\n"
 
 # read -s sudopass
 
+# build rust backend
+cd backend && ./build.sh && cd ..
+
 # printf "\n"
 NODE_ENV=production cd ui && npm run build && cd ..
 rm -rf defaults/web/*
 cp -r ui/dist/* defaults/web
 
 echo $sudopass | sudo $CLI_LOCATION/decky plugin build $(pwd)
+cd backend && ./build.sh && cd ..
 
 # unzip
 #unzip -o out/DeckyFileServer.zip -d out
