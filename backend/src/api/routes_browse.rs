@@ -25,9 +25,9 @@ pub struct File {
 pub fn list_directory_name(base_dir: String, path: String) -> Result<Vec<File>, std::io::Error> {
     let fixed_string = format!("{base_dir}/{path}");
     return read_dir(fixed_string)?
-        .filter(|file| file.is_ok())
-        .map(|x| {
-            let file = x?;
+        .filter(|dir_entry| dir_entry.is_ok())
+        .map(|dir_entry| {
+            let file = dir_entry?;
             return Ok(File {
                 name: file.file_name().into_string().unwrap(),
                 size: file.metadata()?.len(),
