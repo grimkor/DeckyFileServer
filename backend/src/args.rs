@@ -9,13 +9,15 @@ pub fn get_port() -> u16 {
         Some(val) => match val.parse() {
             Ok(parsed) => parsed,
             Err(e) => {
-                println!("{}", e);
-                println!("Failed to parse Port, probably not a valid number. Setting port to 9999");
+                log::error!("{}", e);
+                log::error!(
+                    "Failed to parse Port, probably not a valid number. Setting port to 9999"
+                );
                 9999
             }
         },
         None => {
-            println!("No val found, setting port to 9999");
+            log::info!("No val found, setting port to 9999");
             9999
         }
     };

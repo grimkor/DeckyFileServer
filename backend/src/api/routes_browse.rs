@@ -2,9 +2,9 @@ use std::fs::read_dir;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::{Json, Router};
 use axum::extract::Query;
 use axum::routing::get;
+use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
@@ -43,7 +43,11 @@ pub fn list_directory_name(base_dir: String, path: String) -> Result<Vec<File>, 
         .collect();
 }
 
-pub async fn browse_response(lock: Arc<RwLock<SystemTime>>, base_dir: String, path: Option<Query<Browse>>) -> Result<Json<Vec<File>>, Error> {
+pub async fn browse_response(
+    lock: Arc<RwLock<SystemTime>>,
+    base_dir: String,
+    path: Option<Query<Browse>>,
+) -> Result<Json<Vec<File>>, Error> {
     let p: String = match path {
         None => "".into(),
         Some(x) => x.path.to_owned(),
@@ -53,14 +57,16 @@ pub async fn browse_response(lock: Arc<RwLock<SystemTime>>, base_dir: String, pa
     let json_result = list_directory_name(base_dir, p);
     return match json_result {
         Ok(json) => Ok(Json(json)),
-        Err(_) => Err(Error::Fail)
+        Err(_) => Err(Error::Fail),
     };
 }
 
 pub fn routes(lock: Arc<RwLock<SystemTime>>, base_dir: String) -> Router {
-    Router::new()
-        .route("/api/browse", get(move |x: _| {
+    Router::new().route(
+        "/api/browse",
+        get(move |x: _| {
             let lock_cloned = Arc::clone(&lock);
             browse_response(lock_cloned, base_dir, x)
-        }))
+        }),
+    )
 }

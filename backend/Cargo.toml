@@ -16,3 +16,5 @@ tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.4.0", features = ["fs", "trace", "normalize-path"] }
 mime_guess = "2.0.4"
 axum-server = { version = "0.5.1", features = ["tls-rustls"]}
+simplelog = "0.12.1"
+log = "0.4.19"
