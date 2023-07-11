@@ -27,40 +27,46 @@ const formatModifiedDate = (modified: number) => {
     return date.toDateString()
 }
 
-interface Directory {
-    [key: string]: {
-        isdir: boolean;
-        size: number;
-        modified: number;
-    }
+interface Item {
+    name: string;
+    isdir: boolean;
+    size: number;
+    modified: number;
 }
+
+type Directory = Item[];
 
 function App() {
     const [path, setPath] = useState<string[]>([]);
-    const [directory, setDirectory] = useState<Directory>({})
+    const [directory, setDirectory] = useState<Directory>([])
     const [showMenu, setShowMenu] = useState(false);
     const [showHiddenFiles, setShowHiddenFiles] = useState(false);
     const [sortAToZ, setSortAToZ] = useState(true);
 
-    const handleBack = useCallback(() => setPath(path.slice(0, -1)), [path]);
+    const handleBack = useCallback(() => {
+        if (!path.length) {
+            return;
+        }
+        return setPath(path.slice(0, -1))
+    }, [path]);
 
     useEffect(() => {
         const getData = async () => {
             try {
-                const response = await fetch(`/api/browse/${path.join('/')}`);
-            if (response.ok) {
-                setDirectory(await response.json());
-            }
-            else {
-                handleBack();
-            }
-            } catch(e) {
+                const response = await fetch(`/api/browse?path=${path.join('/')}`);
+                if (response.ok) {
+                    setDirectory(await response.json());
+                } else {
+                    handleBack();
+                }
+            } catch (e) {
                 handleBack();
                 console.error(e);
+            } finally {
+                scrollTo(0, 0);
             }
         }
-        getData()
-        scrollTo(0, 0);
+        getData();
     }, [handleBack, path])
 
 
@@ -70,6 +76,7 @@ function App() {
         } else {
             const a = document.createElement('a');
             a.href = `/api/download/${path.join('/')}/${name}`;
+            a.download = name;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -112,26 +119,26 @@ function App() {
                 ) : null}
             </div>
             <div className={"file-list"}>
-                {Object.entries(directory)
-                    .sort((a, b) => (a > b) === sortAToZ ? 1 : -1)
-                    .filter(([fileName]) => fileName[0] !== '.' || showHiddenFiles)
-                    .map(([name, {isdir, modified, size}]) =>
-                        (
-                            <div className={"file-row"} onClick={handleClick(name, isdir)}>
-                                {isdir ?
-                                    <img src={folderLogo} className={"file-icon_img"}/> :
-                                    <img src={fileLogo} className={"file-icon_img"}/>}
-                                <div className={"file-details"}>
-                                    <div className={"file-details_name"}>
-                                        {name}
-                                    </div>
-                                    <div className={"file-details_description"}>
-                                        {isdir ? '' : formatSizeUnits(size) + ','} {formatModifiedDate(modified)}
+                {directory
+                    .sort((a, b) => (a.name > b.name) === sortAToZ ? 1 : -1)
+                    .filter((file) => file.name[0] !== '.' || showHiddenFiles)
+                    .map((({isdir, modified, size, name}) =>
+                            (
+                                <div className={"file-row"} onClick={handleClick(name, isdir)}>
+                                    {isdir ?
+                                        <img src={folderLogo} className={"file-icon_img"}/> :
+                                        <img src={fileLogo} className={"file-icon_img"}/>}
+                                    <div className={"file-details"}>
+                                        <div className={"file-details_name"}>
+                                            {name}
+                                        </div>
+                                        <div className={"file-details_description"}>
+                                            {isdir ? '' : formatSizeUnits(size) + ','} {formatModifiedDate(modified)}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        )
-                    )}
+                            )
+                    ))}
             </div>
         </div>
     )
