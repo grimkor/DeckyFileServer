@@ -25,7 +25,6 @@ class Plugin:
     _watchdog_task = None
     error = None
 
-    @asyncio.coroutine
     async def watchdog(self):
         while True:
             try:

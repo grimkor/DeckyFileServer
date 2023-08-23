@@ -9,7 +9,7 @@ printf "Please input sudo password to proceed.\n"
 cd backend && ./build.sh && cd ..
 
 # printf "\n"
-NODE_ENV=production cd ui && npm run build && cd ..
+NODE_ENV=production cd ui && npm i && npm run build && cd ..
 rm -rf defaults/web/*
 cp -r ui/dist/* defaults/web
 

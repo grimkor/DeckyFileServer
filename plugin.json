@@ -1,10 +1,10 @@
 {
   "name": "DeckyFileServer",
   "author": "Grimbakor",
-  "flags": ["debug", "_root"],
+  "flags": ["_root"],
   "publish": {
-    "tags": ["template", "root"],
-    "description": "Start your own file server from your steam deck to easily transfer files from your steam deck.",
+    "tags": ["root"],
+    "description": "Plugin that lets you turn on a web server to browse and download files from your Steam Deck.",
     "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
   }
 }
