@@ -8,7 +8,7 @@ cargo --version
 echo "--- Building plugin backend ---"
 cargo build --release
 mkdir -p out
-cp target/release/controller-tools out/backend
+cp target/release/deckyfileserver-rs out/backend
 
 echo " --- Cleaning up ---"
 # remove root-owned target folder
