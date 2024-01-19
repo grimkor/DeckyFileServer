@@ -27,7 +27,6 @@ NOTE: The plugin will disable the server if it hasn't been used for 1 minute, th
 2. Install pnpm globally ie. `npm install --global pnpm`
 3. Run `pnpm i`
 4. Run `pnpm run build`
-5. Go into the `ui` folder and run `npm i`
 6. Back in the project root run `.vscode/build.sh`. This will build the UI and the plugin into the `out/` folder.
 
 

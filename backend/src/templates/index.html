@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<title>DeckyFileServer</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<script src="/static/htmx.js" type="text/javascript"></script>
+	<link href="/static/index.css" rel="stylesheet">
+	<link href="/static/folder.svg" rel="icon">
+</head>
+
+<body>
+	<div class="root">
+		<div class="container">
+			<div class="menu">
+				<div class="back-button" hx-get="/" hx-target="#file-list" hx-push-url="true">Home</div>
+				<div id="menu-button" class="menu-button">Menu</div>
+				<div id="menu-backdrop" class="menu-backdrop"></div>
+				<div id="menu-popup" class="menu-popup"></div>
+			</div>
+			{{ template "files.html" . }}
+		</div>
+	</div>
+</body>
+
+<script>
+	const backdrop = document.getElementById("menu-backdrop");
+	const menuButton = document.getElementById("menu-button");
+	const menuPopup = document.getElementById("menu-popup");
+
+	menuButton.addEventListener('click', function () {
+		backdrop.style.display = "block";
+		menuPopup.style.display = "block";
+	});
+
+	menuPopup.addEventListener('click', function () {
+		backdrop.style.display = "none";
+		menuPopup.style.display = "none";
+	})
+
+	backdrop.addEventListener('click', function () {
+		backdrop.style.display = "none";
+		menuPopup.style.display = "none";
+	})
+
+</script>
+
+</html>

@@ -1,0 +1,16 @@
+<div class="menu-list">
+	<div class="menu-item" hx-get="{{.Path}}{{.HiddenParamsText}}" hx-target="#file-list" hx-push-url="true">
+		{{ if .ShowHidden }}
+		Hide Hidden
+		{{ else }}
+		Show Hidden
+		{{ end }}
+	</div>
+	<div class="menu-item" hx-get="{{.Path}}{{.ReverseParamsText}}" hx-target="#file-list" hx-push-url="true">
+		{{ if .Reverse }}
+		Sort Alphabetically (A-z)
+		{{ else }}
+		Sort Alphabetically (Z-a)
+		{{ end }}
+	</div>
+</div>
