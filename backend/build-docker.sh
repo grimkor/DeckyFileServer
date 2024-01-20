@@ -1,15 +1,6 @@
 #!/bin/bash
 
-echo "--- Rust version info ---"
-rustup --version
-rustc --version
-cargo --version
-
-echo "--- Building plugin backend ---"
-cargo build --release
+cd src
+go build
 mkdir -p out
-cp target/release/deckyfileserver-rs out/backend
-
-echo " --- Cleaning up ---"
-# remove root-owned target folder
-cargo clean
+cp deckyfileserver out/backend

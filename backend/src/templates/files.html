@@ -1,0 +1,32 @@
+<div id="file-list" class="file-list" hx-trigger="load" hx-target="#menu-popup"
+	hx-get="/menu-items{{$.QueryParams}}&path={{.Path}}">
+	{{if .IsHome }}
+	{{ else }}
+	<div class="file-row" hx-get="{{$.ParentPath}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
+		<img class="file-icon_img" src="/static/folder.svg" />
+		<div class="file-details">
+			<div class="file-details_name">..</div>
+			<div class="file-details_description"></div>
+		</div>
+	</div>
+	{{end}}
+	{{ range .Entries }}
+	{{ if .IsDir }}
+	<div class="file-row" hx-get="{{.Path}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
+		<img class="file-icon_img" src="/static/folder.svg" />
+		<div class="file-details">
+			<div class="file-details_name">{{ .Name }}</div>
+		</div>
+	</div>
+	{{else}}
+	<a class="file-row" href="{{.Path}}">
+		<img class="file-icon_img" src="/static/file.svg" />
+		<div class="file-details">
+			<div class="file-details_name">{{ .Name }}</div>
+			<div class="file-details_description">{{.Size.FormatSizeUnits}}</div>
+		</div>
+	</a>
+	{{end}}
+	{{ end }}
+	<hr />
+</div>
