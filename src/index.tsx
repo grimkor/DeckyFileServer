@@ -15,6 +15,7 @@ import {
     staticClasses,
     TextField,
     ToggleField,
+    DropdownItem,
 } from "decky-frontend-lib";
 import {FaServer} from "react-icons/fa";
 import {IoMdAlert} from "react-icons/io";
@@ -27,6 +28,7 @@ interface State {
     ip_address: string,
     error?: string
     accepted_warning: boolean;
+    history: string[]
 }
 
 const Content: VFC<{
@@ -38,6 +40,7 @@ const Content: VFC<{
         port: 8000,
         ip_address: "127.0.0.1",
         accepted_warning: false,
+        history: [],
     })
 
 
@@ -105,6 +108,7 @@ const Content: VFC<{
                         showModal(<SettingsPage
                             port={state.port}
                             directory={state.directory}
+                            history={state.history}
                             serverAPI={serverAPI}
                             handleSubmit={handleModalSubmit}
                         />, window)}
@@ -177,20 +181,31 @@ const SettingsPage: VFC<{
     closeModal?: () => void;
     port: number;
     directory: string;
+    history: string[];
     serverAPI: ServerAPI
     handleSubmit: (port: number, destination: string) => Promise<void>;
 }> = ({
-          closeModal,
-          port,
-          directory,
-          serverAPI,
-          handleSubmit
+        closeModal,
+        port,
+        directory,
+        serverAPI,
+        history,
+        handleSubmit
       }) => {
     const [form, setForm] = useState({
         port,
         directory,
     });
+    const [historySelection, setHistory] = useState("none");
     const [showPortError, setShowPortError] = useState(false);
+
+    // dropdown element is uncontrolled, force it back on change
+    useEffect(() => {
+        if (historySelection === "") {
+            setHistory("none");            
+        }
+    }, [historySelection]);
+
     const handleValueChange = (key: string) => (e: ChangeEvent<HTMLInputElement>) => {
         if (key === 'port' && isNaN(parseInt(e.currentTarget.value))) {
             return;
@@ -225,9 +240,26 @@ const SettingsPage: VFC<{
             <DialogHeader>DeckyFileServer Settings</DialogHeader>
             <DialogBody>
                 <Field label="Directory to Share">
-                <ButtonItem onClick={handleDestinationClick} bottomSeparator={"none"}>
-                    Select Folder
-                </ButtonItem>
+                    <ButtonItem onClick={handleDestinationClick} bottomSeparator={"none"}>
+                        Select Folder
+                    </ButtonItem>
+                </Field>
+                <Field label="History">
+                    <DropdownItem
+                        selectedOption={historySelection}
+                        strDefaultLabel={"Select from history..."}
+                        onChange={sel => {
+                            if (sel.data === "none") {
+                                return;
+                            }
+                            setForm({
+                                ...form,
+                                directory: sel.data,
+                            });
+                            setHistory("");
+                        }}
+                        rgOptions={history.map(h => ({ label: h, data: h }))} 
+                    />
                 </Field>
                 <Field>
                     {form.directory}

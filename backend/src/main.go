@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -35,6 +36,7 @@ func BoolToString(b bool) string {
 }
 
 type FileSize int64
+
 func (bytes FileSize) FormatSizeUnits() string {
 	if bytes >= 1073741824 {
 		return fmt.Sprintf("%.2fGB", float64(bytes/1073741824))
@@ -55,6 +57,7 @@ type DirEntry struct {
 	Name  string
 	Size  FileSize
 	IsDir bool
+	Path  string
 }
 
 type Dir struct {
@@ -88,19 +91,21 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 			Name:  entry.Name(),
 			IsDir: entry.IsDir(),
 			Size:  FileSize(info.Size()),
+			Path:  path.Join(requestPath, entry.Name()),
 		})
 	}
 	sort.Slice(dirs[:], func(i, j int) bool {
 		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name) != reverseSort
 	})
+	queryParams := fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(showHidden), BoolToString(reverseSort))
 	dirData := Dir{
-		dirs,
-		requestPath,
-		parentPath,
-		parentPath == ".",
-		reverseSort,
-		showHidden,
-		fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(showHidden), BoolToString(reverseSort)),
+		Entries:     dirs,
+		Path:        requestPath,
+		ParentPath:  parentPath,
+		IsHome:      requestPath == "/",
+		Reverse:     reverseSort,
+		ShowHidden:  showHidden,
+		QueryParams: queryParams,
 	}
 	return dirData, nil
 }
@@ -113,6 +118,12 @@ func sanitiseRequestURI(requestURI string) string {
 }
 
 func main() {
+	file, err := os.OpenFile("/tmp/deckyfileserver.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	if err != nil {
+		log.Println("Cannot open log file")
+	} else {
+		log.SetOutput(file)
+	}
 	var rootFolder string
 	var port int
 	var timeout int
@@ -122,22 +133,24 @@ func main() {
 	flag.Parse()
 
 	if rootFolder == "" {
-		fmt.Println("-f flag missing or no value. Please provide a folder eg. `-f /home/david/`")
+		log.Println("-f flag missing or no value. Please provide a folder eg. `-f /home/deck/`")
 		os.Exit(1)
 	}
-	_, err := os.ReadDir(rootFolder)
-	if err != nil {
-		fmt.Println(fmt.Sprintf("Folder %s cannot be read or does not exist", rootFolder))
-		os.Exit(1)
+	{
+		_, err := os.ReadDir(rootFolder)
+		if err != nil {
+			log.Println(fmt.Sprintf("Folder %s cannot be read or does not exist", rootFolder))
+			os.Exit(1)
+		}
 	}
 	if port < 8000 {
-		fmt.Println("Port must be over 8000")
+		log.Println("Port must be over 8000")
 		os.Exit(1)
 	}
 
 	m := http.NewServeMux()
 
-	incomeCh := make(chan http.ConnState)
+	connStateCh := make(chan http.ConnState)
 
 	c, _ := certs.ReadFile("certs/cert.pem")
 	k, _ := certs.ReadFile("certs/key.pem")
@@ -149,32 +162,34 @@ func main() {
 			Certificates: []tls.Certificate{cert},
 		},
 		Handler: m, ConnState: func(c net.Conn, cs http.ConnState) {
-			incomeCh <- cs
+			connStateCh <- cs
 		}}
 
 	go func() {
-		t := time.NewTimer(time.Duration(timeout) * time.Second)
-		n := 0
+		timer := time.NewTimer(time.Duration(timeout) * time.Second)
+		activeConns := 0
 		for {
 			select {
-			case cs := <-incomeCh:
-				if cs == http.StateNew {
-					n = n + 1
-					t.Stop()
-					t.Reset(time.Duration(timeout) * time.Second)
+			case connState := <-connStateCh:
+				if connState == http.StateNew {
+					activeConns = activeConns + 1
+					timer.Stop()
+					timer.Reset(time.Duration(timeout) * time.Second)
 				}
-				if cs == http.StateClosed {
-					n = n - 1
+				if connState == http.StateClosed {
+					activeConns = activeConns - 1
 				}
-			case <-t.C:
-				if n == 0 {
-					fmt.Println("Performing shutdown")
+			case <-timer.C:
+				if activeConns == 0 {
+					log.Println("Performing shutdown")
 					if err := s.Shutdown(context.Background()); err != nil {
 						log.Printf("HTTP Server shutdown: %v", err)
 					}
+					close(connStateCh)
 				} else {
-					t.Stop()
-					t.Reset(10 * time.Second)
+					log.Printf("There are %v active connections.\n", activeConns)
+					timer.Stop()
+					timer.Reset(10 * time.Second)
 				}
 			}
 
@@ -184,17 +199,14 @@ func main() {
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		reverse := r.URL.Query().Get("reverse") == "true"
 		showHidden := r.URL.Query().Get("hidden") == "true"
-		requestPath := r.URL.Path
-		requestPath = sanitiseRequestURI(requestPath)
-		folder, _ := strings.CutSuffix(rootFolder, "/")
-		path := fmt.Sprintf("%s/%s", folder, requestPath)
-		stat, err := os.Stat(path)
+		joinedPath := path.Join(rootFolder, r.URL.Path)
+		stat, err := os.Stat(joinedPath)
 		if err != nil {
-			fmt.Println(err.Error())
+			log.Println(err.Error())
 			return
 		}
 		if stat.IsDir() {
-			dirData, _ := getDir(path, requestPath, reverse, showHidden)
+			dirData, _ := getDir(joinedPath, r.URL.Path, reverse, showHidden)
 			if r.Header.Get("HX-Request") == "true" {
 				t := template.Must(template.ParseFS(templateFiles, "templates/files.html"))
 				t.Execute(w, dirData)
@@ -203,7 +215,9 @@ func main() {
 				t.Execute(w, dirData)
 			}
 		} else {
-			http.ServeFile(w, r, path)
+			filename := path.Base(r.RequestURI)
+			w.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+			http.ServeFile(w, r, joinedPath)
 		}
 	})
 
@@ -226,7 +240,7 @@ func main() {
 		t.Execute(w, templateData)
 	})
 
-	fmt.Println(fmt.Sprintf("Running on port %v", port))
+	log.Println(fmt.Sprintf("Running on port %v", port))
 	if err := s.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}

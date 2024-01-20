@@ -12,14 +12,14 @@
 	{{end}}
 	{{ range .Entries }}
 	{{ if .IsDir }}
-	<div class="file-row" hx-get="{{$.Path}}/{{.Name}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
+	<div class="file-row" hx-get="{{.Path}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
 		<img class="file-icon_img" src="/static/folder.svg" />
 		<div class="file-details">
 			<div class="file-details_name">{{ .Name }}</div>
 		</div>
 	</div>
 	{{else}}
-	<a class="file-row" href="{{$.Path}}/{{.Name}}">
+	<a class="file-row" href="{{.Path}}">
 		<img class="file-icon_img" src="/static/file.svg" />
 		<div class="file-details">
 			<div class="file-details_name">{{ .Name }}</div>

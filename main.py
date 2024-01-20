@@ -3,6 +3,7 @@
 # or add the `decky-loader/plugin` path to `python.analysis.extraPaths` in `.vscode/settings.json`
 import asyncio
 import os
+from typing import List, Union
 import decky_plugin # type: ignore
 import socket
 from settings import SettingsManager  # type: ignore
@@ -13,17 +14,15 @@ settings = SettingsManager(name="settings", settings_directory=os.environ["DECKY
 settings.read()
 
 
-def is_port_in_use(port: int) -> bool:
-    import socket
+def is_port_in_use(port: str) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex(('localhost', port)) == 0
-
 
 class Plugin:
     backend = None
     server_running = False
     _watchdog_task = None
-    error = None
+    error: Union[str, None] = None
 
     async def watchdog(self):
         while True:
@@ -44,6 +43,7 @@ class Plugin:
         try:
             self.error = None
             if enable == self.server_running:
+                decky_plugin.logger.info("[set_server_running] Server is already running, returning.")
                 return True
             if enable:
                 if is_port_in_use(await Plugin.get_port(self)):
@@ -64,6 +64,7 @@ class Plugin:
                 )
                 self.server_running = True
                 decky_plugin.logger.info("[set_server_running] Web service started")
+                await Plugin.set_history(self)
             else:
                 if self.backend:
                     self.backend.terminate()
@@ -77,26 +78,40 @@ class Plugin:
     async def get_server_running(self):
         return self.server_running
 
-    async def get_directory(self):
+    async def get_history(self) -> List[str]:
+        return settings.getSetting('HISTORY', [])
+
+    async def set_history(self) -> List[str]:
+        history = await Plugin.get_history(self)
+        new_entry = await Plugin.get_directory(self)
+        if new_entry == '':
+            return history
+        history = [h for h in history if h != new_entry]
+        history.insert(0, new_entry)
+        settings.setSetting('HISTORY', history[:10])
+        settings.commit()
+        return history
+
+    async def get_directory(self) -> str:
         return settings.getSetting('DIRECTORY', '')
 
-    async def set_directory(self, directory: str):
+    async def set_directory(self, directory: str) -> str:
         settings.setSetting('DIRECTORY', directory)
         settings.commit()
         return directory
 
-    async def get_port(self):
+    async def get_port(self) -> str:
         return settings.getSetting('PORT', '')
 
-    async def set_port(self, port: int):
+    async def set_port(self, port: int) -> int:
         settings.setSetting('PORT', int(port))
         settings.commit()
         return port
 
-    async def get_error(self):
+    async def get_error(self) -> Union[None, str]:
         return self.error
 
-    def set_error(self, error):
+    def set_error(self, error: str):
         self.error = error
 
     async def get_accepted_warning(self):
@@ -117,6 +132,7 @@ class Plugin:
             'ip_address': await Plugin.get_ip_address(self),
             'accepted_warning': await Plugin.get_accepted_warning(self),
             'error': await Plugin.get_error(self),
+            'history': await Plugin.get_history(self)
         }
 
     async def set_status(self, status):
