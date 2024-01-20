@@ -148,55 +148,45 @@ func main() {
 		os.Exit(1)
 	}
 
-	m := http.NewServeMux()
+	serveMux := http.NewServeMux()
 
-	connStateCh := make(chan http.ConnState)
+	connStateCh := make(chan struct{})
+	shutdownChan := make(chan struct{})
 
-	c, _ := certs.ReadFile("certs/cert.pem")
-	k, _ := certs.ReadFile("certs/key.pem")
+	cert, _ := certs.ReadFile("certs/cert.pem")
+	certKey, _ := certs.ReadFile("certs/key.pem")
 
-	cert, err := tls.X509KeyPair(c, k)
-	s := &http.Server{
+	certPair, err := tls.X509KeyPair(cert, certKey)
+	server := &http.Server{
 		Addr: fmt.Sprintf(":%v", port),
 		TLSConfig: &tls.Config{
-			Certificates: []tls.Certificate{cert},
+			Certificates: []tls.Certificate{certPair},
 		},
-		Handler: m, ConnState: func(c net.Conn, cs http.ConnState) {
-			connStateCh <- cs
+		Handler: serveMux, ConnState: func(c net.Conn, cs http.ConnState) {
+			if cs == http.StateActive {
+				connStateCh <- struct{}{}
+			}
 		}}
 
 	go func() {
 		timer := time.NewTimer(time.Duration(timeout) * time.Second)
-		activeConns := 0
 		for {
 			select {
-			case connState := <-connStateCh:
-				if connState == http.StateNew {
-					activeConns = activeConns + 1
-					timer.Stop()
-					timer.Reset(time.Duration(timeout) * time.Second)
-				}
-				if connState == http.StateClosed {
-					activeConns = activeConns - 1
-				}
+			case <-connStateCh:
+				timer.Stop()
+				timer.Reset(time.Duration(timeout) * time.Second)
 			case <-timer.C:
-				if activeConns == 0 {
-					log.Println("Performing shutdown")
-					if err := s.Shutdown(context.Background()); err != nil {
-						log.Printf("HTTP Server shutdown: %v", err)
-					}
-					close(connStateCh)
-				} else {
-					log.Printf("There are %v active connections.\n", activeConns)
-					timer.Stop()
-					timer.Reset(10 * time.Second)
+				log.Println("Performing shutdown")
+				if err := server.Shutdown(context.Background()); err != nil {
+					log.Printf("HTTP Server shutdown: %v", err)
 				}
+				shutdownChan <- struct{}{}
 			}
 
 		}
 	}()
 
-	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	serveMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		reverse := r.URL.Query().Get("reverse") == "true"
 		showHidden := r.URL.Query().Get("hidden") == "true"
 		joinedPath := path.Join(rootFolder, r.URL.Path)
@@ -221,9 +211,9 @@ func main() {
 		}
 	})
 
-	m.Handle("/static/", http.FileServer(http.FS(static)))
+	serveMux.Handle("/static/", http.FileServer(http.FS(static)))
 
-	m.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {
+	serveMux.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {
 		reverse := r.URL.Query().Get("reverse") == "true"
 		showHidden := r.URL.Query().Get("hidden") == "true"
 		path := sanitiseRequestURI(r.URL.Query().Get("path"))
@@ -241,7 +231,8 @@ func main() {
 	})
 
 	log.Println(fmt.Sprintf("Running on port %v", port))
-	if err := s.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+	if err := server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
 		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}
+	<-shutdownChan
 }
