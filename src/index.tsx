@@ -124,6 +124,13 @@ const Content: VFC<{
                     <Field inlineWrap="shift-children-below">
                         https://{state.ip_address}:{state.port}
                     </Field>
+                    <Field
+                        inlineWrap="shift-children-below"
+                        label="Directory"
+                        bottomSeparator='none'
+                    >
+		    	{state.directory}
+		    </Field>
                 </PanelSectionRow>
             </PanelSection>
         </>

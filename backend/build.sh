@@ -2,7 +2,6 @@
 
 cd src
 go build
+mkdir -p ../../bin
 
-mkdir -p ../bin
-
-cp --preserve=mode deckyfileserver ../bin/backend
+cp --preserve=mode deckyfileserver ../../bin/backend

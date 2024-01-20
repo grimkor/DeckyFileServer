@@ -3,7 +3,7 @@
 # or add the `decky-loader/plugin` path to `python.analysis.extraPaths` in `.vscode/settings.json`
 import asyncio
 import os
-import decky_plugin
+import decky_plugin # type: ignore
 import socket
 from settings import SettingsManager  # type: ignore
 import subprocess
@@ -54,9 +54,10 @@ class Plugin:
                 self.backend = subprocess.Popen(
                     [
                         f"{decky_plugin.DECKY_PLUGIN_DIR}/bin/backend",
+                        "-f",
                         await Plugin.get_directory(self),
-                        str(settings.getSetting("PORT")),
-                        decky_plugin.DECKY_PLUGIN_DIR
+                        "-p",
+                        str(settings.getSetting("PORT"))
                     ],
                     stdout=PIPE,
                     stderr=subprocess.STDOUT,
@@ -149,8 +150,10 @@ class Plugin:
 
     # Function called first during the unload process, utilize this to handle your plugin being removed
     async def _unload(self):
-        self.backend.terminate()
+        if self.backend:
+            self.backend.terminate()
         decky_plugin.logger.info("[_unload] Unloading plugin")
         await Plugin.set_server_running(self, False)
-        self._watchdog_task.cancel()
+        if self._watchdog_task:
+            self._watchdog_task.cancel()
         pass
