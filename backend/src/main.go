@@ -143,8 +143,8 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	if port < 8000 {
-		log.Println("Port must be over 8000")
+	if port < 1024 || port > 65535 {
+		fmt.Println("Port must be between 1024-65535")
 		os.Exit(1)
 	}
 

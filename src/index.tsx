@@ -104,6 +104,7 @@ const Content: VFC<{
             </PanelSection>
             <PanelSectionRow>
                 <ButtonItem
+                    disabled={state.server_running}
                     onClick={() =>
                         showModal(<SettingsPage
                             port={state.port}
@@ -227,7 +228,7 @@ const SettingsPage: VFC<{
     };
     const handleClose = () => {
         // check port is a number between 1024-65535 before closing
-        if (Number(form.port) >= 1023 && Number(form.port) <= 65535) {
+        if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
             handleSubmit(form.port, form.directory);
             closeModal?.();
         } else {
