@@ -56,6 +56,9 @@ cli/
 cli/*
 cli/decky
 
-# debug build folder
+# build folders
 backend/target
+backend/out
+backend/src/out
+out
 bin

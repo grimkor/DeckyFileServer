@@ -253,14 +253,22 @@ body {
     min-width: 32px;
 }
 
+.file-icon_wrapper {
+    display: flex;
+    height: 100%;
+    width: 90px;
+    overflow: hidden;
+}
+
 .file-icon_img {
-    margin: 0 auto;
-    width: 40px;
+    object-fit: contain;
+    width: inherit;
 }
 
 .file-details {
     flex: 1;
     padding: 0 16px;
+    padding-left: 0;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -300,8 +308,4 @@ body {
         height: 60px;
     }
 
-    .file-icon_img {
-        margin: 0 auto;
-        width: 32px;
-    }
 }

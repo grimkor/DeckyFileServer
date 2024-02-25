@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"deckyfileserver/thumbnail"
 	"embed"
 	"flag"
 	"fmt"
@@ -10,12 +11,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/disintegration/imaging"
+	_ "golang.org/x/image/webp"
 )
 
 //go:embed templates/*
@@ -26,6 +31,8 @@ var static embed.FS
 
 //go:embed certs/*
 var certs embed.FS
+
+var thumbGen thumbnail.ThumbnailGenerator
 
 func BoolToString(b bool) string {
 	if b {
@@ -54,10 +61,11 @@ func (bytes FileSize) FormatSizeUnits() string {
 }
 
 type DirEntry struct {
-	Name  string
-	Size  FileSize
-	IsDir bool
-	Path  string
+	Name      string
+	Size      FileSize
+	IsDir     bool
+	Path      string
+	Thumbnail bool
 }
 
 type Dir struct {
@@ -88,10 +96,11 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 			continue
 		}
 		dirs = append(dirs, DirEntry{
-			Name:  entry.Name(),
-			IsDir: entry.IsDir(),
-			Size:  FileSize(info.Size()),
-			Path:  path.Join(requestPath, entry.Name()),
+			Name:      entry.Name(),
+			IsDir:     entry.IsDir(),
+			Size:      FileSize(info.Size()),
+			Path:      path.Join(requestPath, entry.Name()),
+			Thumbnail: thumbGen.IsCompatibleType(entry.Name()),
 		})
 	}
 	sort.Slice(dirs[:], func(i, j int) bool {
@@ -118,6 +127,12 @@ func sanitiseRequestURI(requestURI string) string {
 }
 
 func main() {
+	thumbGen = thumbnail.ThumbnailGenerator{
+		ThumbnailDir: "/tmp/deckyfileserver-thumbnails",
+		Cache: thumbnail.Cache{
+			Images: map[string][]byte{},
+		},
+	}
 	file, err := os.OpenFile("/tmp/deckyfileserver.log", os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
 		log.Println("Cannot open log file")
@@ -192,7 +207,7 @@ func main() {
 		joinedPath := path.Join(rootFolder, r.URL.Path)
 		stat, err := os.Stat(joinedPath)
 		if err != nil {
-			log.Println(err.Error())
+			log.Println("endpoint '/':", err.Error())
 			return
 		}
 		if stat.IsDir() {
@@ -212,6 +227,17 @@ func main() {
 	})
 
 	serveMux.Handle("/static/", http.FileServer(http.FS(static)))
+	serveMux.HandleFunc("/__preview/", func(w http.ResponseWriter, r *http.Request) {
+		escaped, escapeErr := url.PathUnescape(r.RequestURI)
+		if escapeErr != nil {
+			log.Println("endpoint '/__preview/':", escapeErr.Error())
+		}
+		filePath := strings.TrimPrefix(escaped, "/__preview")
+		filePath = path.Join(rootFolder, filePath)
+		thumb, _ := thumbGen.GetThumbnail(filePath)
+		imaging.Encode(w, thumb, imaging.JPEG)
+		//http.ServeFile(w, r, path.Join(thumbGen.ThumbnailDir, thumb))
+	})
 
 	serveMux.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {
 		reverse := r.URL.Query().Get("reverse") == "true"

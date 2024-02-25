@@ -3,7 +3,9 @@
 	{{if .IsHome }}
 	{{ else }}
 	<div class="file-row" hx-get="{{$.ParentPath}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
-		<img class="file-icon_img" src="/static/folder.svg" />
+		<div class="file-icon_wrapper">
+			<img class="file-icon_img" src="/static/folder.svg" />
+		</div>
 		<div class="file-details">
 			<div class="file-details_name">..</div>
 			<div class="file-details_description"></div>
@@ -13,14 +15,20 @@
 	{{ range .Entries }}
 	{{ if .IsDir }}
 	<div class="file-row" hx-get="{{.Path}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
-		<img class="file-icon_img" src="/static/folder.svg" />
+		<div class="file-icon_wrapper">
+			<img class="file-icon_img" src="/static/folder.svg" />
+		</div>
 		<div class="file-details">
 			<div class="file-details_name">{{ .Name }}</div>
 		</div>
 	</div>
 	{{else}}
 	<a class="file-row" href="{{.Path}}">
-		<img class="file-icon_img" src="/static/file.svg" />
+		<div class="file-icon_wrapper">
+			<img class="file-icon_img"
+				src="{{if .Thumbnail}}/__preview{{.Path}}{{else}}/static/file.svg{{end}}"
+				onerror="this.src='/static/file.svg'" />
+		</div>
 		<div class="file-details">
 			<div class="file-details_name">{{ .Name }}</div>
 			<div class="file-details_description">{{.Size.FormatSizeUnits}}</div>
