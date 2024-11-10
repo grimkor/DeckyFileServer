@@ -25,7 +25,10 @@ func (m *Cache) Add(filePath string, img image.Image) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var buf bytes.Buffer
-	imaging.Encode(&buf, img, imaging.JPEG)
+	err := imaging.Encode(&buf, img, imaging.JPEG)
+	if err != nil {
+		log.Println(err)
+	}
 	m.Images[filePath] = buf.Bytes()
 }
 
@@ -46,7 +49,7 @@ func (tg *ThumbnailGenerator) HashThumbnailName(filePath string) (string, error)
 	return hashedThumbName, nil
 }
 
-func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string, thumbnailPath string) image.Image {
+func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string) image.Image {
 	src, e := imaging.Open(filePath)
 	if e != nil {
 		log.Println("CreateImageThumbnail:", e.Error())
@@ -55,7 +58,7 @@ func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string, thumbnailPat
 	return src
 }
 
-func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string, thumbnailPath string) image.Image {
+func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) image.Image {
 	buf := bytes.NewBuffer(nil)
 	err := ffmpeg.Input(filePath).
 		Filter("scale", ffmpeg.Args{"240:-1"}).
@@ -87,19 +90,12 @@ func (tg *ThumbnailGenerator) GetThumbnail(filePath string) (image.Image, error)
 func (tg *ThumbnailGenerator) GenerateThumbnail(filePath string) (image.Image, error) {
 	ext := mime.TypeByExtension(path.Ext(filePath))
 
-	hashedThumbName, hashErr := tg.HashThumbnailName(filePath)
-	if hashErr != nil {
-		log.Println("GenerateThumbnail:", hashErr.Error())
-		return nil, hashErr
-	}
-	thumbPath := path.Join(tg.ThumbnailDir, hashedThumbName)
-
 	if strings.HasPrefix(ext, "image") {
-		img := tg.CreateImageThumbnail(filePath, thumbPath)
+		img := tg.CreateImageThumbnail(filePath)
 		return img, nil
 	}
 	if strings.HasPrefix(ext, "video") {
-		img := tg.CreateVideoThumbnail(filePath, thumbPath)
+		img := tg.CreateVideoThumbnail(filePath)
 		return img, nil
 	}
 	return nil, nil
