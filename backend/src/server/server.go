@@ -151,10 +151,6 @@ func (s *Server) setupHTTPServer() {
 	connStateCh := make(chan struct{})
 	s.ShutdownChan = make(chan struct{})
 
-	cert, _ := certsFS.ReadFile("certs/cert.pem")
-	certKey, _ := certsFS.ReadFile("certs/key.pem")
-
-	certPair, _ := tls.X509KeyPair(cert, certKey)
 	if s.Unsecure {
 		s.Server = http.Server{
 			Addr:    fmt.Sprintf(":%v", s.Port),
@@ -164,6 +160,10 @@ func (s *Server) setupHTTPServer() {
 				}
 			}}
 	} else {
+		cert, _ := certsFS.ReadFile("certs/cert.pem")
+		certKey, _ := certsFS.ReadFile("certs/key.pem")
+
+		certPair, _ := tls.X509KeyPair(cert, certKey)
 		s.Server = http.Server{
 			Addr: fmt.Sprintf(":%v", s.Port),
 			TLSConfig: &tls.Config{
