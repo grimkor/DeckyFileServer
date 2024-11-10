@@ -112,6 +112,9 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 		})
 	}
 	sort.Slice(dirs[:], func(i, j int) bool {
+		if dirs[i].IsDir != dirs[j].IsDir {
+			return dirs[i].IsDir
+		}
 		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name) != reverseSort
 	})
 	queryParams := fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(showHidden), BoolToString(reverseSort))
