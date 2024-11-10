@@ -137,6 +137,7 @@ type Server struct {
 	RootFolder   string
 	Server       http.Server
 	ShutdownChan chan struct{}
+	Limit        chan struct{}
 }
 
 func (s *Server) setupHTTPServer() {
@@ -150,6 +151,7 @@ func (s *Server) setupHTTPServer() {
 
 	connStateCh := make(chan struct{})
 	s.ShutdownChan = make(chan struct{})
+	s.Limit = make(chan struct{}, 10)
 
 	if s.Unsecure {
 		s.Server = http.Server{

@@ -49,28 +49,28 @@ func (tg *ThumbnailGenerator) HashThumbnailName(filePath string) (string, error)
 	return hashedThumbName, nil
 }
 
-func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string) image.Image {
+func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string) (image.Image, error) {
 	src, e := imaging.Open(filePath)
 	if e != nil {
 		log.Println("CreateImageThumbnail:", e.Error())
 	}
 	src = imaging.Resize(src, 240, 0, imaging.NearestNeighbor)
-	return src
+	return src, e
 }
 
-func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) image.Image {
+func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) (image.Image, error) {
 	buf := bytes.NewBuffer(nil)
 	err := ffmpeg.Input(filePath).
-		Filter("scale", ffmpeg.Args{"240:-1"}).
+		Filter("scale", ffmpeg.Args{"128:-1"}).
 		Filter("select", ffmpeg.Args{fmt.Sprintf("gte(n,%d)", 0)}).
-		Output("pipe:", ffmpeg.KwArgs{"vframes": 1, "format": "image2", "vcodec": "mjpeg"}).
+		Output("pipe:", ffmpeg.KwArgs{"vframes": 1, "format": "image2", "vcodec": "mjpeg", "qscale": 20}).
 		WithOutput(buf).
 		Run()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	img, _ := imaging.Decode(buf)
-	return img
+	img, error := imaging.Decode(buf)
+	return img, error
 }
 
 func (tg *ThumbnailGenerator) GetThumbnail(filePath string) (image.Image, error) {
@@ -89,14 +89,13 @@ func (tg *ThumbnailGenerator) GetThumbnail(filePath string) (image.Image, error)
 
 func (tg *ThumbnailGenerator) GenerateThumbnail(filePath string) (image.Image, error) {
 	ext := mime.TypeByExtension(path.Ext(filePath))
-
 	if strings.HasPrefix(ext, "image") {
-		img := tg.CreateImageThumbnail(filePath)
-		return img, nil
+		img, err := tg.CreateImageThumbnail(filePath)
+		return img, err
 	}
 	if strings.HasPrefix(ext, "video") {
-		img := tg.CreateVideoThumbnail(filePath)
-		return img, nil
+		img, err := tg.CreateVideoThumbnail(filePath)
+		return img, err
 	}
 	return nil, nil
 }

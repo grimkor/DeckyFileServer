@@ -25,9 +25,11 @@
 	{{else}}
 	<a class="file-row" href="{{.Path}}">
 		<div class="file-icon_wrapper">
-			<img class="file-icon_img"
-				src="{{if .Thumbnail}}/__preview{{.Path}}{{else}}/static/file.svg{{end}}"
-				onerror="this.src='/static/file.svg'" />
+			{{ if .Thumbnail }}
+			<img class="file-icon_img" src="/__preview{{.Path}}" onerror="this.src='/static/file.svg'" />
+			{{ else }}
+			<img class="file-icon_img" src="/static/files.svg" onerror="this.src='/static/file.svg'" />
+			{{ end }}
 		</div>
 		<div class="file-details">
 			<div class="file-details_name">{{ .Name }}</div>
