@@ -143,7 +143,9 @@ func (s *Server) setupHTTPServer() {
 	thumbGen = thumbnail.ThumbnailGenerator{
 		Cache: thumbnail.Cache{
 			Images: map[string]*thumbnail.CacheImage{},
+			Chans: map[string][]chan *thumbnail.CacheImage{},
 		},
+
 	}
 
 	serveMux := http.NewServeMux()

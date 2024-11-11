@@ -2,14 +2,12 @@ package thumbnail
 
 import (
 	"bytes"
-	"fmt"
 	"image"
 	"log"
 	"mime"
 	"path"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/disintegration/imaging"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
@@ -23,6 +21,7 @@ type CacheImage struct {
 type Cache struct {
 	mu     sync.Mutex
 	Images map[string]*CacheImage
+	Chans  map[string][]chan *CacheImage
 }
 
 func (c *Cache) Lock() {
@@ -31,16 +30,6 @@ func (c *Cache) Lock() {
 
 func (c *Cache) Unlock() {
 	c.mu.Unlock()
-}
-
-func (m *Cache) IsReady(filePath string) bool {
-	m.Lock()
-	defer m.Unlock()
-	val, ok := m.Images[filePath]
-	if ok {
-		return val.Ready
-	}
-	return false
 }
 
 func (m *Cache) Add(filePath string, img image.Image) {
@@ -56,6 +45,10 @@ func (m *Cache) Add(filePath string, img image.Image) {
 	} else {
 		m.Images[filePath] = &CacheImage{Image: img, Ready: true}
 	}
+	for _, pending := range m.Chans[filePath] {
+		pending <- val
+	}
+	m.Chans[filePath] = nil
 }
 
 func (m *Cache) AddPending(filePath string) {
@@ -72,6 +65,17 @@ func (m *Cache) Get(filePath string) (*CacheImage, bool) {
 	defer m.Unlock()
 	val, ok := m.Images[filePath]
 	return val, ok
+}
+
+func (m *Cache) AddChan(filePath string, waitChan chan *CacheImage) {
+	m.Lock()
+	defer m.Unlock()
+	_, ok := m.Chans[filePath]
+	if ok {
+		m.Chans[filePath] = append(m.Chans[filePath], waitChan)
+	} else {
+		m.Chans[filePath] = []chan *CacheImage{waitChan}
+	}
 }
 
 type ThumbnailGenerator struct {
@@ -92,7 +96,7 @@ func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) (image.Image
 	buf := bytes.NewBuffer(nil)
 	err := ffmpeg.Input(filePath).
 		Filter("scale", ffmpeg.Args{"128:-1"}).
-		Filter("select", ffmpeg.Args{fmt.Sprintf("gte(n,%d)", 0)}).
+		Filter("select", ffmpeg.Args{"gte(n,0)"}).
 		Output("pipe:", ffmpeg.KwArgs{"vframes": 1, "format": "image2", "vcodec": "mjpeg", "qscale": 20}).
 		WithOutput(buf).
 		Run()
@@ -106,8 +110,11 @@ func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) (image.Image
 func (tg *ThumbnailGenerator) GetThumbnail(filePath string) (image.Image, error) {
 	val, ok := tg.Cache.Get(filePath)
 	if ok {
-		for !tg.Cache.IsReady(filePath) {
-			time.Sleep(10 * time.Millisecond)
+		if !val.Ready {
+			waitChan := make(chan *CacheImage)
+			tg.Cache.AddChan(filePath, waitChan)
+			result := <- waitChan
+			return result.Image, nil
 		}
 		return val.Image, nil
 	} else {
