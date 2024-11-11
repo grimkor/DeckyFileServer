@@ -3,33 +3,75 @@ package thumbnail
 import (
 	"bytes"
 	"fmt"
-	"hash/fnv"
 	"image"
 	"log"
 	"mime"
-	"os"
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/disintegration/imaging"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
+type CacheImage struct {
+	Image image.Image
+	Ready bool
+}
+
 type Cache struct {
 	mu     sync.Mutex
-	Images map[string][]byte
+	Images map[string]*CacheImage
+}
+
+func (c *Cache) Lock() {
+	c.mu.Lock()
+}
+
+func (c *Cache) Unlock() {
+	c.mu.Unlock()
+}
+
+func (m *Cache) IsReady(filePath string) bool {
+	m.Lock()
+	defer m.Unlock()
+	val, ok := m.Images[filePath]
+	if ok {
+		return val.Ready
+	}
+	return false
 }
 
 func (m *Cache) Add(filePath string, img image.Image) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	var buf bytes.Buffer
-	err := imaging.Encode(&buf, img, imaging.JPEG)
-	if err != nil {
-		log.Println(err)
+	m.Lock()
+	defer m.Unlock()
+	val, ok := m.Images[filePath]
+	if ok && val.Ready {
+		return
 	}
-	m.Images[filePath] = buf.Bytes()
+	if ok {
+		val.Image = img
+		val.Ready = true
+	} else {
+		m.Images[filePath] = &CacheImage{Image: img, Ready: true}
+	}
+}
+
+func (m *Cache) AddPending(filePath string) {
+	m.Lock()
+	defer m.Unlock()
+	_, ok := m.Images[filePath]
+	if !ok {
+		m.Images[filePath] = &CacheImage{Ready: false}
+	}
+}
+
+func (m *Cache) Get(filePath string) (*CacheImage, bool) {
+	m.Lock()
+	defer m.Unlock()
+	val, ok := m.Images[filePath]
+	return val, ok
 }
 
 type ThumbnailGenerator struct {
@@ -37,24 +79,12 @@ type ThumbnailGenerator struct {
 	Cache        Cache
 }
 
-func (tg *ThumbnailGenerator) HashThumbnailName(filePath string) (string, error) {
-	file, err := os.Stat(filePath)
-	if err != nil {
-		log.Println("HashThumbnailName:", err.Error())
-		return "", err
-	}
-	h := fnv.New32a()
-	h.Write([]byte(file.Name() + file.ModTime().String()))
-	hashedThumbName := fmt.Sprintf("%d.jpeg", h.Sum32())
-	return hashedThumbName, nil
-}
-
 func (tg *ThumbnailGenerator) CreateImageThumbnail(filePath string) (image.Image, error) {
 	src, e := imaging.Open(filePath)
 	if e != nil {
 		log.Println("CreateImageThumbnail:", e.Error())
 	}
-	src = imaging.Resize(src, 240, 0, imaging.NearestNeighbor)
+	src = imaging.Resize(src, 128, 0, imaging.NearestNeighbor)
 	return src, e
 }
 
@@ -74,30 +104,45 @@ func (tg *ThumbnailGenerator) CreateVideoThumbnail(filePath string) (image.Image
 }
 
 func (tg *ThumbnailGenerator) GetThumbnail(filePath string) (image.Image, error) {
-	val, ok := tg.Cache.Images[filePath]
+	val, ok := tg.Cache.Get(filePath)
 	if ok {
-		img, err := imaging.Decode(bytes.NewReader(val))
-		if err != nil {
-			println("GetThumbnail (decode):", err.Error())
+		for !tg.Cache.IsReady(filePath) {
+			time.Sleep(10 * time.Millisecond)
 		}
-		return img, nil
+		return val.Image, nil
+	} else {
+		img, err := tg.GenerateThumbnail(filePath)
+		if err != nil {
+			log.Println("GetThumbnail > GenerateThumbnail", err)
+		}
+
+		return img, err
 	}
-	img, err := tg.GenerateThumbnail(filePath)
-	tg.Cache.Add(filePath, img)
-	return img, err
 }
 
 func (tg *ThumbnailGenerator) GenerateThumbnail(filePath string) (image.Image, error) {
+	tg.Cache.AddPending(filePath)
 	ext := mime.TypeByExtension(path.Ext(filePath))
+	var img image.Image
+	var err error
 	if strings.HasPrefix(ext, "image") {
-		img, err := tg.CreateImageThumbnail(filePath)
-		return img, err
+		img, err = tg.CreateImageThumbnail(filePath)
+		if err != nil {
+			log.Println(err)
+		}
+		if img != nil {
+			tg.Cache.Add(filePath, img)
+		}
+	} else if strings.HasPrefix(ext, "video") {
+		img, err = tg.CreateVideoThumbnail(filePath)
+		if err != nil {
+			log.Println(err)
+		}
+		if img != nil {
+			tg.Cache.Add(filePath, img)
+		}
 	}
-	if strings.HasPrefix(ext, "video") {
-		img, err := tg.CreateVideoThumbnail(filePath)
-		return img, err
-	}
-	return nil, nil
+	return img, err
 }
 
 func (tg *ThumbnailGenerator) IsCompatibleType(filePath string) bool {

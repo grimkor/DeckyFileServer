@@ -137,13 +137,12 @@ type Server struct {
 	RootFolder   string
 	Server       http.Server
 	ShutdownChan chan struct{}
-	Limit        chan struct{}
 }
 
 func (s *Server) setupHTTPServer() {
 	thumbGen = thumbnail.ThumbnailGenerator{
 		Cache: thumbnail.Cache{
-			Images: map[string][]byte{},
+			Images: map[string]*thumbnail.CacheImage{},
 		},
 	}
 
@@ -151,7 +150,6 @@ func (s *Server) setupHTTPServer() {
 
 	connStateCh := make(chan struct{})
 	s.ShutdownChan = make(chan struct{})
-	s.Limit = make(chan struct{}, 10)
 
 	if s.Unsecure {
 		s.Server = http.Server{
@@ -211,6 +209,19 @@ func (s *Server) setupHTTPServer() {
 				t := template.Must(template.ParseFS(templatesFS, "templates/files.html"))
 				t.Execute(w, dirData)
 			} else {
+				for _, entry := range dirData.Entries {
+					go func(e DirEntry) {
+						fullpath := path.Join(joinedPath, e.Name)
+						log.Println(fullpath)
+						if !e.IsDir && thumbGen.IsCompatibleType(fullpath) {
+							_, err := thumbGen.GetThumbnail(fullpath)
+							if err != nil {
+								log.Println(err)
+							}
+
+						}
+					}(entry)
+				}
 				t := template.Must(template.ParseFS(templatesFS, "templates/index.html", "templates/files.html"))
 				t.Execute(w, dirData)
 			}
@@ -223,6 +234,7 @@ func (s *Server) setupHTTPServer() {
 
 	serveMux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	serveMux.HandleFunc("/__preview/", func(w http.ResponseWriter, r *http.Request) {
+		log.Println(r.URL)
 		escaped, escapeErr := url.PathUnescape(r.RequestURI)
 		if escapeErr != nil {
 			log.Println("endpoint '/__preview/':", escapeErr.Error())
@@ -231,11 +243,10 @@ func (s *Server) setupHTTPServer() {
 		filePath = path.Join(s.RootFolder, filePath)
 		thumb, err := thumbGen.GetThumbnail(filePath)
 		if err != nil {
-			log.Panicln(err)
-			os.Exit(1)
+			log.Println("/__Preview ThumbGen:", err)
+			return
 		}
 		imaging.Encode(w, thumb, imaging.JPEG)
-		//http.ServeFile(w, r, path.Join(thumbGen.ThumbnailDir, thumb))
 	})
 
 	serveMux.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {
