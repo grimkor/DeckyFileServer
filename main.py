@@ -57,7 +57,8 @@ class Plugin:
                         "-f",
                         await Plugin.get_directory(self),
                         "-p",
-                        str(settings.getSetting("PORT"))
+                        str(settings.getSetting("PORT")),
+                        ("-unsecure", "")[await Plugin.get_https_enabled(self)]
                     ],
                     stdout=PIPE,
                     stderr=subprocess.STDOUT,
@@ -70,6 +71,7 @@ class Plugin:
                     self.backend.terminate()
                 decky_plugin.logger.info("[set_server_running] Stopping web service")
                 self.server_running = False
+                self.backend = None
             return enable
         except Exception as e:
             decky_plugin.logger.error(f"[set_server_running]: {e}")
@@ -108,6 +110,12 @@ class Plugin:
         settings.commit()
         return port
 
+    async def get_https_enabled(self):
+        return settings.getSetting("HTTPS", True)
+
+    async def set_https_enabled(self, enabled: bool):
+        settings.setSetting("HTTPS", enabled)
+
     async def get_error(self) -> Union[None, str]:
         return self.error
 
@@ -132,16 +140,18 @@ class Plugin:
             'ip_address': await Plugin.get_ip_address(self),
             'accepted_warning': await Plugin.get_accepted_warning(self),
             'error': await Plugin.get_error(self),
-            'history': await Plugin.get_history(self)
+            'history': await Plugin.get_history(self),
+            'https': await Plugin.get_https_enabled(self)
         }
 
     async def set_status(self, status):
         try:
-            decky_plugin.logger.info(status)
             if 'directory' in status:
                 await Plugin.set_directory(self, status['directory'])
             if 'port' in status:
                 await Plugin.set_port(self, status['port'])
+            if 'https' in status:
+                await Plugin.set_https_enabled(self, status['https'])
             if 'server_running' in status:
                 await Plugin.set_server_running(self, status['server_running'])
             return await Plugin.get_status(self)

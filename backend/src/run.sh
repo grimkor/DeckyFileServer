@@ -1,3 +1,3 @@
 #!/bin/bash
 
-nodemon --watch "./**/*.go" --signal SIGTERM --exec go run main.go
+npx nodemon --ext "go,html" --signal SIGTERM --exec go run *.go -- -f $HOME -verbose
