@@ -142,11 +142,11 @@ type Server struct {
 func (s *Server) setupHTTPServer() {
 	thumbGen = thumbnail.ThumbnailGenerator{
 		Cache: thumbnail.Cache{
-			Images: map[string]*thumbnail.CacheImage{},
-			Chans: map[string][]chan *thumbnail.CacheImage{},
+			Images: map[string]*thumbnail.CacheImageJob{},
+			Chans:  map[string]chan *thumbnail.CacheImageJob{},
 		},
-
 	}
+	thumbGen.SetWorkerCount(4)
 
 	serveMux := http.NewServeMux()
 
@@ -188,7 +188,7 @@ func (s *Server) setupHTTPServer() {
 			case <-timer.C:
 				log.Println("Performing shutdown")
 				if err := s.Server.Shutdown(context.Background()); err != nil {
-					log.Printf("HTTP Server shutdown: %v", err)
+					log.Printf("[ERROR]: HTTP Server shutdown: %v", err)
 				}
 				s.ShutdownChan <- struct{}{}
 			}
@@ -202,28 +202,20 @@ func (s *Server) setupHTTPServer() {
 		joinedPath := path.Join(s.RootFolder, r.URL.Path)
 		stat, err := os.Stat(joinedPath)
 		if err != nil {
-			log.Println("endpoint '/':", err.Error())
+			log.Println("[ERROR]: endpoint '/':", err.Error())
 			return
 		}
 		if stat.IsDir() {
 			dirData, _ := getDir(joinedPath, r.URL.Path, reverse, showHidden)
+			var paths []string
+			for _, dd := range dirData.Entries {
+				paths = append(paths, path.Join(joinedPath, dd.Name))
+			}
+			go thumbGen.StartBatchJob(paths)
 			if r.Header.Get("HX-Request") == "true" {
 				t := template.Must(template.ParseFS(templatesFS, "templates/files.html"))
 				t.Execute(w, dirData)
 			} else {
-				for _, entry := range dirData.Entries {
-					go func(e DirEntry) {
-						fullpath := path.Join(joinedPath, e.Name)
-						log.Println(fullpath)
-						if !e.IsDir && thumbGen.IsCompatibleType(fullpath) {
-							_, err := thumbGen.GetThumbnail(fullpath)
-							if err != nil {
-								log.Println(err)
-							}
-
-						}
-					}(entry)
-				}
 				t := template.Must(template.ParseFS(templatesFS, "templates/index.html", "templates/files.html"))
 				t.Execute(w, dirData)
 			}
@@ -236,19 +228,22 @@ func (s *Server) setupHTTPServer() {
 
 	serveMux.Handle("/static/", http.FileServer(http.FS(staticFS)))
 	serveMux.HandleFunc("/__preview/", func(w http.ResponseWriter, r *http.Request) {
-		log.Println(r.URL)
 		escaped, escapeErr := url.PathUnescape(r.RequestURI)
 		if escapeErr != nil {
 			log.Println("endpoint '/__preview/':", escapeErr.Error())
 		}
 		filePath := strings.TrimPrefix(escaped, "/__preview")
 		filePath = path.Join(s.RootFolder, filePath)
-		thumb, err := thumbGen.GetThumbnail(filePath)
+		thumb, err := thumbGen.GetThumbnail(filePath, r.Context())
 		if err != nil {
-			log.Println("/__Preview ThumbGen:", err)
-			return
+			log.Println("[ERROR]: /__Preview ThumbGen:", err)
 		}
-		imaging.Encode(w, thumb, imaging.JPEG)
+		if thumb != nil {
+			error := imaging.Encode(w, thumb, imaging.JPEG)
+			if error != nil {
+				log.Println("[ERROR]: error", error)
+			}
+		}
 	})
 
 	serveMux.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {

@@ -27,18 +27,18 @@ func main() {
 	logger.SetupLogger("/tmp/deckyfileserver.log", verbose)
 
 	if rootFolder == "" {
-		log.Println("-f flag missing or no value. Please provide a folder eg. `-f /home/deck/`")
+		log.Println("[ERROR]: -f flag missing or no value. Please provide a folder eg. `-f /home/deck/`")
 		os.Exit(1)
 	}
 	{
 		_, err := os.ReadDir(rootFolder)
 		if err != nil {
-			log.Println(fmt.Sprintf("Folder %s cannot be read or does not exist", rootFolder))
+			log.Println(fmt.Sprintf("[ERROR]: Folder %s cannot be read or does not exist", rootFolder))
 			os.Exit(1)
 		}
 	}
 	if port < 1024 || port > 65535 {
-		fmt.Println("Port must be between 1024-65535")
+		fmt.Println("[ERROR]: Port must be between 1024-65535")
 		os.Exit(1)
 	}
 
