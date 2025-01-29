@@ -25,6 +25,7 @@ interface State {
     server_running: boolean,
     directory: string,
     port: number,
+    https: boolean,
     ip_address: string,
     error?: string
     accepted_warning: boolean;
@@ -38,6 +39,7 @@ const Content: VFC<{
         server_running: false,
         directory: "/home/deck",
         port: 8000,
+        https: true,
         ip_address: "127.0.0.1",
         accepted_warning: false,
         history: [],
@@ -84,14 +86,15 @@ const Content: VFC<{
         if (state.accepted_warning) {
             await setServerStatus({server_running: checked});
         } else {
-           showModal(<WarningModal onCancel={onCancel} onConfirm={onConfirm} />, window)
+            showModal(<WarningModal onCancel={onCancel} onConfirm={onConfirm} />, window)
         }
-   };
+    };
 
-    const handleModalSubmit = async (port: number, directory: string) => {
+    const handleModalSubmit = async (port: number, directory: string, https: boolean) => {
         setServerStatus({
             port: Number(port),
-            directory
+            directory,
+            https,
         })
     };
     return (
@@ -110,6 +113,7 @@ const Content: VFC<{
                             port={state.port}
                             directory={state.directory}
                             history={state.history}
+                            https={state.https}
                             serverAPI={serverAPI}
                             handleSubmit={handleModalSubmit}
                         />, window)}
@@ -124,10 +128,10 @@ const Content: VFC<{
                         label="Server Address"
                         bottomSeparator='none'
                     >
-                        https://steamdeck:{state.port}
+                        http{state.https ? 's' : ''}://steamdeck:{state.port}
                     </Field>
                     <Field inlineWrap="shift-children-below">
-                        https://{state.ip_address}:{state.port}
+                        http{state.https ? 's' : ''}://{state.ip_address}:{state.port}
                     </Field>
                     <Field
                         inlineWrap="shift-children-below"
@@ -183,19 +187,22 @@ const SettingsPage: VFC<{
     port: number;
     directory: string;
     history: string[];
+    https: boolean;
     serverAPI: ServerAPI
-    handleSubmit: (port: number, destination: string) => Promise<void>;
+    handleSubmit: (port: number, destination: string, https: boolean) => Promise<void>;
 }> = ({
         closeModal,
         port,
         directory,
         serverAPI,
         history,
+        https,
         handleSubmit
       }) => {
     const [form, setForm] = useState({
         port,
         directory,
+        https,
     });
     const [historySelection, setHistory] = useState("none");
     const [showPortError, setShowPortError] = useState(false);
@@ -229,7 +236,7 @@ const SettingsPage: VFC<{
     const handleClose = () => {
         // check port is a number between 1024-65535 before closing
         if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
-            handleSubmit(form.port, form.directory);
+            handleSubmit(form.port, form.directory, form.https);
             closeModal?.();
         } else {
             setShowPortError(true);
@@ -280,6 +287,22 @@ const SettingsPage: VFC<{
                         defaultValue={form.port}
                         onChange={handleValueChange("port")}
                     />
+                </Field>
+            </DialogBody>
+            <DialogBody>
+                <Field label="Secure Connection (HTTPS)">
+                    <DropdownItem
+                        selectedOption={https ? "Yes" : "No"}
+                        strDefaultLabel={"Yes"}
+                        onChange={sel => {
+                            setForm({
+                                ...form,
+                                https: sel.data === 'Yes',
+                            });
+                        }}
+                        rgOptions={[{ label: "Yes", data: "Yes" }, { label: "No", data: "No" }]} 
+                    />
+                
                 </Field>
             </DialogBody>
         </ModalRoot>
