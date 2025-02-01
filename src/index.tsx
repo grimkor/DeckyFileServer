@@ -1,4 +1,4 @@
-import React, {ChangeEvent, useEffect, useState, VFC} from 'react';
+import React, {ChangeEvent, useEffect, useRef, useState, VFC} from 'react';
 import {
     ButtonItem,
     definePlugin,
@@ -16,8 +16,11 @@ import {
     TextField,
     ToggleField,
     DropdownItem,
+    Focusable,
+    Toggle,
+    DialogSubHeader,
 } from "decky-frontend-lib";
-import {FaServer} from "react-icons/fa";
+import {FaServer, FaHistory} from "react-icons/fa";
 import {IoMdAlert} from "react-icons/io";
 
 
@@ -98,15 +101,14 @@ const Content: VFC<{
         })
     };
     return (
-        <>
-            <PanelSection>
-                <PanelSectionRow>
-                    <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server"/>
-                    {state.error ? <div>{state.error}</div> : null}
-                </PanelSectionRow>
-            </PanelSection>
+        <PanelSection>
+            <PanelSectionRow>
+                <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server"/>
+                {state.error ? <div>{state.error}</div> : null}
+            </PanelSectionRow>
             <PanelSectionRow>
                 <ButtonItem
+                    layout='below'
                     disabled={state.server_running}
                     onClick={() =>
                         showModal(<SettingsPage
@@ -121,28 +123,26 @@ const Content: VFC<{
                     Settings
                 </ButtonItem>
             </PanelSectionRow>
-            <PanelSection>
-                <PanelSectionRow>
-                    <Field
-                        inlineWrap="shift-children-below"
-                        label="Server Address"
-                        bottomSeparator='none'
-                    >
-                        http{state.https ? 's' : ''}://steamdeck:{state.port}
-                    </Field>
-                    <Field inlineWrap="shift-children-below">
-                        http{state.https ? 's' : ''}://{state.ip_address}:{state.port}
-                    </Field>
-                    <Field
-                        inlineWrap="shift-children-below"
-                        label="Directory"
-                        bottomSeparator='none'
-                    >
-		    	{state.directory}
-		    </Field>
-                </PanelSectionRow>
-            </PanelSection>
-        </>
+            <PanelSectionRow>
+                <Field
+                    inlineWrap="shift-children-below"
+                    label="Server Address"
+                    bottomSeparator='none'
+                >
+                    http{state.https ? 's' : ''}://steamdeck:{state.port}
+                </Field>
+                <Field inlineWrap="shift-children-below">
+                    http{state.https ? 's' : ''}://{state.ip_address}:{state.port}
+                </Field>
+                <Field
+                    inlineWrap="shift-children-below"
+                    label="Directory"
+                    bottomSeparator='none'
+                >
+                    {state.directory}
+                </Field>
+            </PanelSectionRow>
+        </PanelSection>
     )
 };
 
@@ -206,6 +206,7 @@ const SettingsPage: VFC<{
     });
     const [historySelection, setHistory] = useState("none");
     const [showPortError, setShowPortError] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
 
     // dropdown element is uncontrolled, force it back on change
     useEffect(() => {
@@ -224,7 +225,9 @@ const SettingsPage: VFC<{
             [key]: parseInt(e.currentTarget.value),
         });
     };
-    const handleDestinationClick = async () => {
+    const handleDestinationClick = async (e: React.MouseEvent<HTMLElement>) => {
+        e.stopPropagation();
+        e.preventDefault();
         const file = await serverAPI.openFilePicker(directory, false);
         if (file.path) {
             setForm({
@@ -243,38 +246,75 @@ const SettingsPage: VFC<{
         }
     };
 
+    // TODO: USE FILE PICKER AND MAKE DIRECTORY TO SHARE FULL WIDTH
     return (
         <ModalRoot onCancel={handleClose}>
-            <DialogHeader>DeckyFileServer Settings</DialogHeader>
-            <DialogBody>
-                <Field label="Directory to Share">
-                    <ButtonItem onClick={handleDestinationClick} bottomSeparator={"none"}>
-                        Select Folder
-                    </ButtonItem>
-                </Field>
-                <Field label="History">
-                    <DropdownItem
-                        selectedOption={historySelection}
-                        strDefaultLabel={"Select from history..."}
-                        onChange={sel => {
-                            if (sel.data === "none") {
-                                return;
-                            }
-                            setForm({
-                                ...form,
-                                directory: sel.data,
-                            });
-                            setHistory("");
+            <DialogBody style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+            }}>
+                <DialogSubHeader>Directory to share</DialogSubHeader>
+                <Focusable flow-children='right' style={{ display: 'flex', flex: 1, gap: 8 }}>
+                    <DialogButton 
+                        // @ts-ignore
+                        onClick={handleDestinationClick}
+                        style={{ flex: 1, textAlign: "left" }}
+                    >
+                        {form.directory}
+                    </DialogButton>
+                    <DialogButton
+                        style={{
+                            minWidth: 'fit-content',
+                            width: 0,
+                            padding: '20px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center'
                         }}
-                        rgOptions={history.map(h => ({ label: h, data: h }))} 
-                    />
-                </Field>
-                <Field>
-                    {form.directory}
-                </Field>
-            </DialogBody>
-            <DialogBody>
-                <Field label="Port" icon={showPortError ? <IoMdAlert size={20} color="red"/> : null}>
+                        onPointerDown={() => {
+                            const container = document.getElementById("TESTING123");
+                            console.log("pointerDown",container);
+                        }}
+                        onMouseDown={() => {
+                            const container = document.getElementById("TESTING123");
+                            console.log("pointerDown",container);
+                        }}
+                        onTouchStart={() => {
+                            const container = document.getElementById("TESTING123");
+                            console.log("touchStart",container);
+                        }}
+                        onClick={() => {
+                            if (ref?.current) {
+                                ref.current.getElementsByTagName('button')[0]?.click();
+                            }
+                        }}
+                    >
+                        <FaHistory fontSize={20} />
+                    </DialogButton>
+                    <div ref={ref} style={{display: 'none'}} id="TESTING123">
+                        <DropdownItem
+                            selectedOption={historySelection}
+                            label={undefined}
+                            strDefaultLabel={undefined}
+                            onChange={sel => {
+                                if (sel.data === "none") {
+                                    return;
+                                }
+                                setForm({
+                                    ...form,
+                                    directory: sel.data,
+                                });
+                                setHistory("");
+                            }}
+                            rgOptions={history.map(h => ({ label: h, data: h }))} 
+                            bottomSeparator="none"
+
+                        />
+                    </div>
+                </Focusable>
+                <DialogSubHeader>Server</DialogSubHeader>
+                <Field label="Port" icon={showPortError ? <IoMdAlert size={20} color="red"/> : null} bottomSeparator='none'>
                     <TextField
                         description="Must be between 1024 and 65535"
                         style={{
@@ -288,21 +328,16 @@ const SettingsPage: VFC<{
                         onChange={handleValueChange("port")}
                     />
                 </Field>
-            </DialogBody>
-            <DialogBody>
-                <Field label="Secure Connection (HTTPS)">
-                    <DropdownItem
-                        selectedOption={https ? "Yes" : "No"}
-                        strDefaultLabel={"Yes"}
-                        onChange={sel => {
+                <Field label="Secure Connection (HTTPS)" bottomSeparator='none'>
+                    <Toggle
+                        value={form.https}
+                        onChange={(value) => 
                             setForm({
                                 ...form,
-                                https: sel.data === 'Yes',
-                            });
-                        }}
-                        rgOptions={[{ label: "Yes", data: "Yes" }, { label: "No", data: "No" }]} 
+                                https: value,
+                            })
+                        }
                     />
-                
                 </Field>
             </DialogBody>
         </ModalRoot>
