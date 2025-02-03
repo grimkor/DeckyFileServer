@@ -53,6 +53,38 @@ type Dir struct {
 	QueryParams string
 }
 
+func (d Dir) ReverseParamText() string {
+	str := "?hidden="
+	if d.ShowHidden {
+		str += "true"
+	} else {
+		str += "false"
+	}
+	str += "&reverse="
+	if d.Reverse {
+		str += "false"
+	} else {
+		str += "true"
+	}
+	return str
+}
+
+func (d Dir) HiddenParamText() string {
+	str := "?hidden="
+	if d.ShowHidden {
+		str += "false"
+	} else {
+		str += "true"
+	}
+	str += "&reverse="
+	if d.Reverse {
+		str += "true"
+	} else {
+		str += "false"
+	}
+	return str
+}
+
 type MenuItemsData struct {
 	Path              string
 	Reverse           bool
@@ -122,7 +154,7 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 		Entries:     dirs,
 		Path:        requestPath,
 		ParentPath:  parentPath,
-		IsHome:      requestPath == "/",
+		IsHome:      requestPath == "/files/",
 		Reverse:     reverseSort,
 		ShowHidden:  showHidden,
 		QueryParams: queryParams,
@@ -196,10 +228,18 @@ func (s *Server) setupHTTPServer() {
 		}
 	}()
 
+
 	serveMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/files/", http.StatusFound)
+		}
+	})
+
+	serveMux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
 		reverse := r.URL.Query().Get("reverse") == "true"
 		showHidden := r.URL.Query().Get("hidden") == "true"
-		joinedPath := path.Join(s.RootFolder, r.URL.Path)
+		trimmedPath := strings.TrimPrefix(r.URL.Path, "/files")
+		joinedPath := path.Join(s.RootFolder, trimmedPath)
 		stat, err := os.Stat(joinedPath)
 		if err != nil {
 			log.Println("[ERROR]: endpoint '/':", err.Error())
@@ -214,10 +254,20 @@ func (s *Server) setupHTTPServer() {
 			go thumbGen.StartBatchJob(paths)
 			if r.Header.Get("HX-Request") == "true" {
 				t := template.Must(template.ParseFS(templatesFS, "templates/files.html"))
-				t.Execute(w, dirData)
+				err := t.ExecuteTemplate(w, "content", dirData)
+				if err != nil {
+					log.Println(err)
+				}
+				errMenu := t.ExecuteTemplate(w, "menu", dirData)
+				if errMenu != nil {
+					log.Println(errMenu)
+				}
 			} else {
 				t := template.Must(template.ParseFS(templatesFS, "templates/index.html", "templates/files.html"))
-				t.Execute(w, dirData)
+				err := t.Execute(w, dirData)
+				if err != nil {
+					log.Println(err)
+				}
 			}
 		} else {
 			filename := path.Base(r.RequestURI)
@@ -227,16 +277,16 @@ func (s *Server) setupHTTPServer() {
 	})
 
 	serveMux.Handle("/static/", http.FileServer(http.FS(staticFS)))
-	serveMux.HandleFunc("/__preview/", func(w http.ResponseWriter, r *http.Request) {
+	serveMux.HandleFunc("/preview/", func(w http.ResponseWriter, r *http.Request) {
 		escaped, escapeErr := url.PathUnescape(r.RequestURI)
 		if escapeErr != nil {
-			log.Println("endpoint '/__preview/':", escapeErr.Error())
+			log.Println("[ERROR]: endpoint '/preview/':", escapeErr.Error())
 		}
-		filePath := strings.TrimPrefix(escaped, "/__preview")
+		filePath := strings.TrimPrefix(escaped, "/preview/files")
 		filePath = path.Join(s.RootFolder, filePath)
 		thumb, err := thumbGen.GetThumbnail(filePath, r.Context())
 		if err != nil {
-			log.Println("[ERROR]: /__Preview ThumbGen:", err)
+			log.Println("[ERROR]: /Preview ThumbGen:", err)
 		}
 		if thumb != nil {
 			error := imaging.Encode(w, thumb, imaging.JPEG)
@@ -245,24 +295,6 @@ func (s *Server) setupHTTPServer() {
 			}
 		}
 	})
-
-	serveMux.HandleFunc("/menu-items", func(w http.ResponseWriter, r *http.Request) {
-		reverse := r.URL.Query().Get("reverse") == "true"
-		showHidden := r.URL.Query().Get("hidden") == "true"
-		path := sanitiseRequestURI(r.URL.Query().Get("path"))
-		requestPath, _ := strings.CutPrefix(r.URL.Path, "/menu-items")
-		requestPath = sanitiseRequestURI(requestPath)
-		templateData := MenuItemsData{
-			Reverse:           reverse,
-			ShowHidden:        showHidden,
-			Path:              "/" + strings.TrimLeft(path, "/"),
-			HiddenParamsText:  fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(!showHidden), BoolToString(reverse)),
-			ReverseParamsText: fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(showHidden), BoolToString(!reverse)),
-		}
-		t := template.Must(template.ParseFS(templatesFS, "templates/menu-items.html"))
-		t.Execute(w, templateData)
-	})
-
 }
 
 func (s *Server) Start() {

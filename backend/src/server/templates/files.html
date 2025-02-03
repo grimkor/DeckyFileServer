@@ -1,8 +1,8 @@
-<div id="file-list" class="file-list" hx-trigger="load" hx-target="#menu-popup"
-	hx-get="/menu-items{{$.QueryParams}}&path={{.Path}}">
+{{define "content"}}
+<div id="file-list" class="file-list">
 	{{if .IsHome }}
 	{{ else }}
-	<div class="file-row" hx-get="{{$.ParentPath}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
+	<div class="file-row" hx-get="{{$.ParentPath}}{{$.QueryParams}}" hx-target="#content" hx-push-url="true">
 		<div class="file-icon_wrapper">
 			<img class="file-icon_img" src="/static/folder.svg" />
 		</div>
@@ -14,7 +14,7 @@
 	{{end}}
 	{{ range .Entries }}
 	{{ if .IsDir }}
-	<div class="file-row" hx-get="{{.Path}}{{$.QueryParams}}" hx-target="#file-list" hx-push-url="true">
+	<div class="file-row" hx-get="{{.Path}}{{$.QueryParams}}" hx-target="#content" hx-push-url="true">
 		<div class="file-icon_wrapper">
 			<img class="file-icon_img" src="/static/folder.svg" />
 		</div>
@@ -26,7 +26,7 @@
 	<a class="file-row" href="{{.Path}}">
 		<div class="file-icon_wrapper">
 			{{ if .Thumbnail }}
-			<img class="file-icon_img" src="/__preview{{.Path}}" onerror="this.src='/static/file.svg'" />
+			<img class="file-icon_img" src="/preview{{.Path}}" onerror="this.src='/static/file.svg'" />
 			{{ else }}
 			<img class="file-icon_img" src="/static/file.svg" onerror="this.src='/static/file.svg'" />
 			{{ end }}
@@ -40,3 +40,33 @@
 	{{ end }}
 	<hr />
 </div>
+{{end}}
+
+{{define "menu"}}
+<div id="menu-popup" hx-swap-oob="innerHTML">
+	<div class="menu-list">
+		<div class="menu-item" 
+		     hx-get="{{.Path}}{{.HiddenParamText}}" 
+		     hx-target="#content" 
+		     hx-push-url="true"
+		     >
+		     {{ if .ShowHidden }}
+		     Hide Hidden
+		     {{ else }}
+		     Show Hidden
+		     {{ end }}
+		</div>
+			<div class="menu-item" 
+			     hx-get="{{.Path}}{{.ReverseParamText}}" 
+			     hx-target="#content" 
+			     hx-push-url="true"
+			     >
+			     {{ if .Reverse }}
+			     Sort Alphabetically (A-z)
+			     {{ else }}
+			     Sort Alphabetically (Z-a)
+			     {{ end }}
+			</div>
+	</div>
+</div>
+{{end}}

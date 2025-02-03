@@ -14,37 +14,40 @@
 	<div class="root">
 		<div class="container">
 			<div class="menu">
-				<div class="back-button" hx-get="/" hx-target="#file-list" hx-push-url="true">Home</div>
+				<div class="back-button" hx-get="/" hx-target="#content" hx-push-url="true">Home</div>
 				<div id="menu-button" class="menu-button">
 					<img class="file-icon_img" src="/static/menu.svg" />
 				</div>
 				<div id="menu-backdrop" class="menu-backdrop"></div>
-				<div id="menu-popup" class="menu-popup"></div>
+				<div id="menu-popup" class="menu-popup">{{template "menu" .}}</div>
 			</div>
-			{{ template "files.html" . }}
+			<main id="content">{{template "content" .}}</main>
 		</div>
 	</div>
 </body>
 
 <script>
-	const backdrop = document.getElementById("menu-backdrop");
-	const menuButton = document.getElementById("menu-button");
-	const menuPopup = document.getElementById("menu-popup");
 
-	menuButton.addEventListener('click', function () {
-		backdrop.style.display = "block";
-		menuPopup.style.display = "block";
+	document.addEventListener("DOMContentLoaded", function() {
+		let backdrop = document.getElementById("menu-backdrop");
+		let menuButton = document.getElementById("menu-button");
+		let menuPopup = document.getElementById("menu-popup");
+
+		menuButton.addEventListener('click', function () {
+			backdrop.style.display = "block";
+			menuPopup.style.display = "block";
+		});
+
+		menuPopup.addEventListener('click', function () {
+			backdrop.style.display = "none";
+			menuPopup.style.display = "none";
+		})
+
+		backdrop.addEventListener('click', function () {
+			backdrop.style.display = "none";
+			menuPopup.style.display = "none";
+		})
 	});
-
-	menuPopup.addEventListener('click', function () {
-		backdrop.style.display = "none";
-		menuPopup.style.display = "none";
-	})
-
-	backdrop.addEventListener('click', function () {
-		backdrop.style.display = "none";
-		menuPopup.style.display = "none";
-	})
 
 </script>
 
