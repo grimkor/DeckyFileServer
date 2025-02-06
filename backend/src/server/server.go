@@ -53,6 +53,10 @@ type Dir struct {
 	QueryParams string
 }
 
+type UploadTemplateData struct {
+	Path string
+}
+
 func (d Dir) ReverseParamText() string {
 	str := "?hidden="
 	if d.ShowHidden {
@@ -185,14 +189,37 @@ func (s *Server) setupHTTPServer() {
 	connStateCh := make(chan struct{})
 	s.ShutdownChan = make(chan struct{})
 
+	//corsMiddleware := func(next http.Handler) http.Handler {
+	//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	//		w.Header().Set("Access-Control-Allow-Origin", "*")
+	//		w.Header().Set("Access-Control-Allow-Methods", "*")
+	//		w.Header().Set("Access-Control-Allow-Headers", "*")
+	//		if r.Method == http.MethodOptions {
+	//			// Return a simple OK response for preflight requests
+	//			w.WriteHeader(http.StatusOK)
+	//			return
+	//		}
+	//		next.ServeHTTP(w, r)
+	//	})
+	//}
+
+	//serveMuxWithCORS := corsMiddleware(serveMux)
+
 	if s.Unsecure {
 		s.Server = http.Server{
-			Addr:    fmt.Sprintf(":%v", s.Port),
-			Handler: serveMux, ConnState: func(c net.Conn, cs http.ConnState) {
+			Addr:              fmt.Sprintf(":%v", s.Port),
+			Handler:           serveMux,
+			ReadTimeout:       0,
+			ReadHeaderTimeout: 0,
+			WriteTimeout:      0,
+			IdleTimeout:       0,
+			MaxHeaderBytes:    1024 * 1024,
+			ConnState: func(c net.Conn, cs http.ConnState) {
 				if cs == http.StateActive {
 					connStateCh <- struct{}{}
 				}
-			}}
+			},
+		}
 	} else {
 		cert, _ := certsFS.ReadFile("certs/cert.pem")
 		certKey, _ := certsFS.ReadFile("certs/key.pem")
@@ -227,7 +254,6 @@ func (s *Server) setupHTTPServer() {
 
 		}
 	}()
-
 
 	serveMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
@@ -289,10 +315,76 @@ func (s *Server) setupHTTPServer() {
 			log.Println("[ERROR]: /Preview ThumbGen:", err)
 		}
 		if thumb != nil {
-			error := imaging.Encode(w, thumb, imaging.JPEG)
-			if error != nil {
-				log.Println("[ERROR]: error", error)
+			encodeErr := imaging.Encode(w, thumb, imaging.JPEG)
+			if encodeErr != nil {
+				log.Println("[ERROR]: error", encodeErr)
 			}
+		}
+	})
+
+	//serveMux.HandleFunc("/upload_file/", func(w http.ResponseWriter, r *http.Request) {
+	//	w.Header().Set("Access-Control-Allow-Origin", "*")
+	//	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	//	w.Header().Set("Access-Control-Allow-Headers", "*")
+	//	if r.Method == "OPTIONS" {
+	//		return
+	//	}
+	//	fileName := r.Header.Get("X-File-Name")
+	//	fullPath := path.Join("tmp", fileName)
+	//	log.Println("[INFO]: endpoint '/upload_file/':", fullPath)
+	//	var file *os.File
+	//	if r.Header.Get("X-Chunk-Start") == "0" {
+	//		log.Println("[INFO]: endpoint '/upload_file/': creating file")
+	//		fileCreate, err := os.Create(fullPath)
+	//		if err != nil {
+	//			log.Println("[ERROR]: endpoint '/upload_file/':", err)
+	//			w.WriteHeader(http.StatusInternalServerError)
+	//			return
+	//		}
+	//		file = fileCreate
+	//	} else {
+	//		fileOpen, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY, 0644)
+	//		if err != nil {
+	//			log.Println("[ERROR]: endpoint '/upload_file/':", err)
+	//			w.WriteHeader(http.StatusInternalServerError)
+	//			return
+	//		}
+	//		file = fileOpen
+	//	}
+	//	defer file.Close()
+	//	buf := bufio.NewReader(r.Body)
+	//	b := new(bytes.Buffer)
+	//	io.Copy(b, buf)
+	//	_, writeErr := file.Write(b.Bytes())
+	//	if writeErr != nil {
+	//		log.Println("[ERROR]: endpoint '/upload_file/':", writeErr)
+	//		w.WriteHeader(http.StatusInternalServerError)
+	//		return
+	//	}
+	//	if r.Header.Get("X-Chunk-End") == r.Header.Get("X-Total-Size") {
+	//		log.Println("file has been uploaded")
+	//	}
+	//	w.WriteHeader(http.StatusOK)
+	//})
+
+	serveMux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			data := UploadTemplateData{
+				Path: strings.TrimPrefix(r.URL.Query().Get("path"), "/files"),
+			}
+			t := template.Must(template.ParseFS(templatesFS, "templates/upload.html"))
+			err := t.Execute(w, data)
+			if err != nil {
+				log.Println(err)
+			}
+			return
+		} else if r.Method == "POST" {
+			log.Println("[INFO]: endpoint '/upload':", r.URL.Path)
+			w.WriteHeader(200)
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) //1MB
+			w.Write([]byte("OK"))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
 		}
 	})
 }

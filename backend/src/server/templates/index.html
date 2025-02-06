@@ -11,19 +11,22 @@
 </head>
 
 <body>
-	<div class="root">
-		<div class="container">
-			<div class="menu">
-				<div class="back-button" hx-get="/" hx-target="#content" hx-push-url="true">Home</div>
-				<div id="menu-button" class="menu-button">
-					<img class="file-icon_img" src="/static/menu.svg" />
-				</div>
-				<div id="menu-backdrop" class="menu-backdrop"></div>
-				<div id="menu-popup" class="menu-popup">{{template "menu" .}}</div>
+<div id="modal" class="modal">
+	<div id="modal-content" class="modal-content"></div>
+</div>
+<div class="root">
+	<div class="container">
+		<div class="menu">
+			<div class="back-button" hx-get="/" hx-target="#content" hx-push-url="true">Home</div>
+			<div id="menu-button" class="menu-button">
+				<img class="file-icon_img" src="/static/menu.svg" />
 			</div>
-			<main id="content">{{template "content" .}}</main>
+			<div id="menu-backdrop" class="menu-backdrop"></div>
+			<div id="menu-popup" class="menu-popup">{{template "menu" .}}</div>
 		</div>
+		<main id="content">{{template "content" .}}</main>
 	</div>
+</div>
 </body>
 
 <script>
@@ -32,6 +35,7 @@
 		let backdrop = document.getElementById("menu-backdrop");
 		let menuButton = document.getElementById("menu-button");
 		let menuPopup = document.getElementById("menu-popup");
+		let modal = document.getElementById("modal");
 
 		menuButton.addEventListener('click', function () {
 			backdrop.style.display = "block";
@@ -41,14 +45,19 @@
 		menuPopup.addEventListener('click', function () {
 			backdrop.style.display = "none";
 			menuPopup.style.display = "none";
-		})
+		});
 
 		backdrop.addEventListener('click', function () {
 			backdrop.style.display = "none";
 			menuPopup.style.display = "none";
-		})
+		});
+
+		modal.addEventListener("click", function (e) {
+			if (e.target === modal) {
+				modal.style.display = "none";
+			}
+		});
 	});
 
 </script>
-
 </html>

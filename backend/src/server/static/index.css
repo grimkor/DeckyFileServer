@@ -309,3 +309,109 @@ body {
     }
 
 }
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.modal-content {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #fefefe;
+    /*margin: 15% auto;*/
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%;
+}
+
+.upload-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    min-width: min-content;
+    margin: auto;
+}
+
+.progress-container {
+    position: relative;
+    display: none;
+    width: 100%;
+    background-color: #ddd;
+    border-radius: 25px;
+    margin-top: 10px;
+}
+
+.progress-bar {
+    height: 30px;
+    width: 0;
+    background-color: #4CAF50;
+    text-align: center;
+    line-height: 20px;
+    border-radius: 25px;
+    transition: width 0.1s;
+}
+
+.progress-bar-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.file-input-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.file-input-container input[type="file"] {
+    display: none;
+}
+
+.file-input-container button {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+    margin: 10px;
+}
+
+.file-input-container button:hover {
+    background-color: #45a049;
+}
+
+.submit-button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.submit-button:hover {
+    background-color: #45a049;
+}
+
+.submit-button:disabled {
+    background-color: #ddd;
+    cursor: default;
+}

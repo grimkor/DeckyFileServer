@@ -45,28 +45,35 @@
 {{define "menu"}}
 <div id="menu-popup" hx-swap-oob="innerHTML">
 	<div class="menu-list">
-		<div class="menu-item" 
-		     hx-get="{{.Path}}{{.HiddenParamText}}" 
-		     hx-target="#content" 
-		     hx-push-url="true"
-		     >
-		     {{ if .ShowHidden }}
-		     Hide Hidden
-		     {{ else }}
-		     Show Hidden
-		     {{ end }}
+		<div class="menu-item"
+			 hx-get="{{.Path}}{{.HiddenParamText}}"
+			 hx-target="#content"
+			 hx-push-url="true"
+		>
+			{{ if .ShowHidden }}
+			Hide Hidden
+			{{ else }}
+			Show Hidden
+			{{ end }}
 		</div>
-			<div class="menu-item" 
-			     hx-get="{{.Path}}{{.ReverseParamText}}" 
-			     hx-target="#content" 
-			     hx-push-url="true"
-			     >
-			     {{ if .Reverse }}
-			     Sort Alphabetically (A-z)
-			     {{ else }}
-			     Sort Alphabetically (Z-a)
-			     {{ end }}
-			</div>
+		<div class="menu-item"
+			 hx-get="{{.Path}}{{.ReverseParamText}}"
+			 hx-target="#content"
+			 hx-push-url="true"
+		>
+			{{ if .Reverse }}
+			Sort Alphabetically (A-z)
+			{{ else }}
+			Sort Alphabetically (Z-a)
+			{{ end }}
+		</div>
+		<div class="menu-item"
+			 hx-get="/upload?path={{.Path}}"
+			 hx-target="#modal"
+			 hx-swap="innerHTML"
+			 >
+			Upload File
+		</div>
 	</div>
 </div>
 {{end}}

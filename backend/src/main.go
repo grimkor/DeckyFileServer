@@ -5,10 +5,9 @@ import (
 	"deckyfileserver/server"
 	"flag"
 	"fmt"
+	_ "golang.org/x/image/webp"
 	"log"
 	"os"
-
-	_ "golang.org/x/image/webp"
 )
 
 func main() {
@@ -42,11 +41,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	server := server.Server{
+	s := server.Server{
 		Unsecure:   unsecure,
 		Port:       port,
 		Timeout:    timeout,
 		RootFolder: rootFolder,
 	}
-	server.Start()
+	s.Start()
 }
