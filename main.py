@@ -23,6 +23,7 @@ class Plugin:
     server_running = False
     _watchdog_task = None
     error: Union[str, None] = None
+    uploads_enabled: bool = False
 
     async def watchdog(self):
         while True:
@@ -58,7 +59,7 @@ class Plugin:
                         await Plugin.get_directory(self),
                         "-p",
                         str(settings.getSetting("PORT")),
-                        ("-unsecure", "")[await Plugin.get_https_enabled(self)]
+                        ("", "-uploads")[await Plugin.get_uploads_enabled(self)]
                     ],
                     stdout=PIPE,
                     stderr=subprocess.STDOUT,
@@ -110,11 +111,11 @@ class Plugin:
         settings.commit()
         return port
 
-    async def get_https_enabled(self):
-        return settings.getSetting("HTTPS", True)
+    async def get_uploads_enabled(self):
+        return self.uploads_enabled
 
-    async def set_https_enabled(self, enabled: bool):
-        settings.setSetting("HTTPS", enabled)
+    async def set_uploads_enabled(self, enabled: bool):
+        self.uploads_enabled = enabled
 
     async def get_error(self) -> Union[None, str]:
         return self.error
@@ -141,7 +142,7 @@ class Plugin:
             'accepted_warning': await Plugin.get_accepted_warning(self),
             'error': await Plugin.get_error(self),
             'history': await Plugin.get_history(self),
-            'https': await Plugin.get_https_enabled(self)
+            'allow_uploads': await Plugin.get_uploads_enabled(self)
         }
 
     async def set_status(self, status):
@@ -150,8 +151,8 @@ class Plugin:
                 await Plugin.set_directory(self, status['directory'])
             if 'port' in status:
                 await Plugin.set_port(self, status['port'])
-            if 'https' in status:
-                await Plugin.set_https_enabled(self, status['https'])
+            if 'allow_uploads' in status:
+                await Plugin.set_uploads_enabled(self, status['allow_uploads'])
             if 'server_running' in status:
                 await Plugin.set_server_running(self, status['server_running'])
             return await Plugin.get_status(self)

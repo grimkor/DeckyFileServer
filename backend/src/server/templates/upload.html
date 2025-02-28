@@ -5,9 +5,10 @@
             <button id="file-input-button" onclick="handleFileInputClick()" >Choose File</button>
             <span id="file-name-text">No file selected</span>
             <span id="file-size-text"></span>
-            <input type="file" id="file-input" onchange="handleFile(event)" accept="image/*">
+            <input type="file" id="file-input" onchange="handleFile(event)">
         </div>
-        <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Submit</button>
+        <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Upload</button>
+        <button class="cancel-button" id="cancel-button" onclick="cancelUpload()" disabled>Cancel</button>
         <div class="progress-container" id="progress-container">
             <div id="progress-bar" class="progress-bar">
                 <span id="progress-bar-text" class="progress-bar-text">0%</span>
@@ -16,12 +17,65 @@
     </div>
 </div>
 <script>
+    var IS_UPLOADING = false;
+    var checksum;
+    var chunkSize = 1024 * 1024; // 1MB
 
     var fileInput = document.getElementById('file-input');
     var progressContainer = document.getElementById('progress-container');
     var progressBar = document.getElementById('progress-bar');
     var progressBarText = document.getElementById('progress-bar-text');
-    var uploadButton = document.getElementById('submit-button');
+    var submitButton = document.getElementById('submit-button');
+    var cancelButton = document.getElementById('cancel-button');
+    var modal = document.getElementById('modal');
+
+    modal.addEventListener("click", handleModalClick);
+    function handleModalClick(e) {
+        if (e.target !== modal) return;
+        if (IS_UPLOADING) {
+            IS_UPLOADING = !confirm("Cancel Upload?");
+        }
+        if (IS_UPLOADING) return;
+        cancelUpload();
+        modal.style.display = "none";
+        modal.removeEventListener("click", handleModalClick);
+        checksum = null;
+    }
+
+    function setIsUploading(uploading) {
+        IS_UPLOADING = uploading;
+        submitButton.disabled = uploading;
+        cancelButton.disabled = !uploading;
+        submitButton.style.display = uploading ? 'none' : 'block';
+        cancelButton.style.display = uploading ? 'block' : 'none';
+    }
+
+    async function cancelUpload() {
+        if (!checksum) return;
+        return new Promise((resolve, reject) => {
+            try {
+                const url = "/cancel_upload?filehash=" + encodeURIComponent(checksum);
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', url, true);
+                xhr.onload = () => {
+                    if (xhr.status === 200) {
+                        resolve();
+                    } else {
+                        reject(new Error(`Failed to cancel upload with code: ${xhr.status}`));
+                    }
+                };
+                xhr.onerror = () => {
+                    reject(new Error('Network error occurred.'));
+                };
+                xhr.send();
+                progressBarText.innerText = "Cancelled!";
+                setIsUploading(false);
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    }
+    
     function handleFileInputClick() {
         fileInput.click();
     }
@@ -30,55 +84,57 @@
         const file = event?.target?.files?.[0];
         if (file) {
             document.getElementById('file-name-text').innerText = file.name;
-            document.getElementById('file-size-text').innerText = ` (${(file.size / 1024).toFixed(2)} KB)`;
+            document.getElementById('file-size-text').innerText = `(${convertFileSize(file.size)})`;
         } else {
             document.getElementById('file-name-text').innerText = "Select File";
             document.getElementById('file-size-text').innerText = "";
         }
-        uploadButton.disabled = !event?.target?.files?.[0];
+        submitButton.disabled = !event?.target?.files?.[0];
         progressContainer.style.display = 'none';
         setProgress(0);
     }
 
     async function uploadFile() {
-        const chunkSize = 1024 * 1024; // 1MB
+        submitButton.disabled = true;
         const file = fileInput.files[0];
         try {
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            checksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+
             fileInput.disabled = true;
-            uploadButton.disabled = true;
+            submitButton.disabled = true;
+            cancelButton.style.display = 'block';
+            submitButton.style.display = 'none';
             progressContainer.style.display = 'block';
             let start = 0;
             const totalChunks = Math.ceil(file.size / chunkSize);
-            while (start < file.size) {
+            setIsUploading(true);
+            while (start < file.size && IS_UPLOADING) {
                 const end = Math.min(start + chunkSize, file.size);
                 const chunk = file.slice(start, end);
                 setProgress(Math.floor((end / file.size) * 100));
-                await uploadChunk(chunk, start, end, totalChunks, file);
+                await uploadChunk(chunk, start, end, totalChunks, checksum, file);
                 start = end;
             }
         } catch (e) {
             console.error(e);
         } finally {
-            fileInput.disabled = false;
+            setIsUploading(false);
         }
     }
 
-    function setProgress(value) {
-        progressBar.style.width = value + "%";
-        progressBarText.innerHTML = value + "%";
-    }
-
-    async function uploadChunk(chunk, start, end, total, file) {
+    async function uploadChunk(chunk, start, end, total, checksum, file) {
         try {
             return new Promise((resolve, reject) => {
+                const url = "/upload?path={{.Path | urlquery}}&filename=" + encodeURIComponent(file.name);
                 const xhr = new XMLHttpRequest();
-                xhr.open('POST', `/upload?path={{.Path | urlquery}}`, true);
+                xhr.open('POST', url, true);
                 xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-                xhr.setRequestHeader('X-File-Name', file.name);
-                xhr.setRequestHeader('X-Chunk-Start', start);
-                xhr.setRequestHeader('X-Chunk-End', end);
-                xhr.setRequestHeader('X-Chunk-Total', total);
-                xhr.setRequestHeader('X-Total-Size', file.size);
+                xhr.setRequestHeader('Upload-Offset', start);
+                xhr.setRequestHeader('Upload-Incomplete', String(end !== file.size));
+                xhr.setRequestHeader('X-File-Checksum', checksum);
                 xhr.onload = () => {
                     if (xhr.status === 200) {
                         resolve();
@@ -95,35 +151,23 @@
             console.error('Upload failed with status: ' + xhr.status);
         }
     }
+
+    function setProgress(value) {
+        progressBar.style.width = value + "%";
+        progressBarText.innerHTML = value + "%";
+    }
+
     document.getElementById("modal").style.display = "block";
 
-    // modal.addEventListener("htmx:afterSwap", listenerFunction);
-    // function listenerFunction() {
-    //     const fileInput = document.getElementById('file-input');
-    //     const fileInputButton = document.getElementById('file-input-button');
-    //     const progressContainer = document.getElementById('progress-container');
-    //     const progressBar = document.getElementById('progress-bar');
-    //     const progressBarText = document.getElementById('progress-bar-text');
-    //     const uploadButton = document.getElementById('submit-button');
-    //
-    //     // fileInput.addEventListener('change', handleFile);
-    //     // fileInputButton.addEventListener('click', handleFileInputClick);
-    //     // uploadButton.addEventListener('click', uploadFile);
-    //
-    //
-    //     function setProgress(value) {
-    //         progressBar.style.width = value + "%";
-    //         progressBarText.innerHTML = value + "%";
-    //     }
-    //
-    //
-    //     document.addEventListener("htmx:beforeSwap", function() {
-    //         // fileInput.removeEventListener('change', handleFile);
-    //         // fileInputButton.removeEventListener('click', handleFileInputClick);
-    //         // uploadButton.removeEventListener('click', uploadFile);
-    //         modal.removeEventListener("htmx:afterSwap", listenerFunction);
-    //     });
-    //
-    // }
+    function convertFileSize(size) {
+        const KB = 1024;
+        const MB = 1048576;
+        const GB = 1073741824;
+
+        if (size >= GB) return `${(size / GB).toFixed(2)} GB`;
+        if (size >= MB) return `${(size / MB).toFixed(2)} MB`;
+        if (size >= KB) return `${(size / KB).toFixed(2)} KB`;
+        return `${size} Bytes`;
+    }
 
 </script>

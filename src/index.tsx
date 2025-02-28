@@ -28,7 +28,7 @@ interface State {
     server_running: boolean,
     directory: string,
     port: number,
-    https: boolean,
+    allow_uploads: boolean,
     ip_address: string,
     error?: string
     accepted_warning: boolean;
@@ -42,7 +42,7 @@ const Content: VFC<{
         server_running: false,
         directory: "/home/deck",
         port: 8000,
-        https: true,
+        allow_uploads: true,
         ip_address: "127.0.0.1",
         accepted_warning: false,
         history: [],
@@ -93,11 +93,11 @@ const Content: VFC<{
         }
     };
 
-    const handleModalSubmit = async (port: number, directory: string, https: boolean) => {
+    const handleModalSubmit = async (port: number, directory: string, allow_uploads: boolean) => {
         setServerStatus({
             port: Number(port),
             directory,
-            https,
+            allow_uploads,
         })
     };
     return (
@@ -115,7 +115,7 @@ const Content: VFC<{
                             port={state.port}
                             directory={state.directory}
                             history={state.history}
-                            https={state.https}
+                            allow_uploads={state.allow_uploads}
                             serverAPI={serverAPI}
                             handleSubmit={handleModalSubmit}
                         />, window)}
@@ -129,10 +129,10 @@ const Content: VFC<{
                     label="Server Address"
                     bottomSeparator='none'
                 >
-                    http{state.https ? 's' : ''}://steamdeck:{state.port}
+                    http{state.allow_uploads ? 's' : ''}://steamdeck:{state.port}
                 </Field>
                 <Field inlineWrap="shift-children-below">
-                    http{state.https ? 's' : ''}://{state.ip_address}:{state.port}
+                    http{state.allow_uploads ? 's' : ''}://{state.ip_address}:{state.port}
                 </Field>
                 <Field
                     inlineWrap="shift-children-below"
@@ -187,7 +187,7 @@ const SettingsPage: VFC<{
     port: number;
     directory: string;
     history: string[];
-    https: boolean;
+    allow_uploads: boolean;
     serverAPI: ServerAPI
     handleSubmit: (port: number, destination: string, https: boolean) => Promise<void>;
 }> = ({
@@ -196,13 +196,13 @@ const SettingsPage: VFC<{
         directory,
         serverAPI,
         history,
-        https,
+        allow_uploads,
         handleSubmit
       }) => {
     const [form, setForm] = useState({
         port,
         directory,
-        https,
+        allow_uploads: allow_uploads,
     });
     const [historySelection, setHistory] = useState("none");
     const [showPortError, setShowPortError] = useState(false);
@@ -239,7 +239,7 @@ const SettingsPage: VFC<{
     const handleClose = () => {
         // check port is a number between 1024-65535 before closing
         if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
-            handleSubmit(form.port, form.directory, form.https);
+            handleSubmit(form.port, form.directory, form.allow_uploads);
             closeModal?.();
         } else {
             setShowPortError(true);
@@ -328,13 +328,13 @@ const SettingsPage: VFC<{
                         onChange={handleValueChange("port")}
                     />
                 </Field>
-                <Field label="Secure Connection (HTTPS)" bottomSeparator='none'>
+                <Field label="Allow Uploads" bottomSeparator='none'>
                     <Toggle
-                        value={form.https}
-                        onChange={(value) => 
+                        value={form.allow_uploads}
+                        onChange={(value) =>
                             setForm({
                                 ...form,
-                                https: value,
+                                allow_uploads: value,
                             })
                         }
                     />

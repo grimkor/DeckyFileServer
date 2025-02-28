@@ -1,11 +1,16 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"deckyfileserver/thumbnail"
 	"embed"
+	"encoding/hex"
 	"html/template"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,29 +48,30 @@ type DirEntry struct {
 	Thumbnail bool
 }
 
-type Dir struct {
-	Entries     []DirEntry
-	Path        string
-	ParentPath  string
-	IsHome      bool
-	Reverse     bool
-	ShowHidden  bool
-	QueryParams string
+type FilePageData struct {
+	Entries      []DirEntry
+	Path         string
+	ParentPath   string
+	IsHome       bool
+	Reverse      bool
+	ShowHidden   bool
+	QueryParams  string
+	AllowUploads bool
 }
 
 type UploadTemplateData struct {
 	Path string
 }
 
-func (d Dir) ReverseParamText() string {
+func (f FilePageData) ReverseParamText() string {
 	str := "?hidden="
-	if d.ShowHidden {
+	if f.ShowHidden {
 		str += "true"
 	} else {
 		str += "false"
 	}
 	str += "&reverse="
-	if d.Reverse {
+	if f.Reverse {
 		str += "false"
 	} else {
 		str += "true"
@@ -73,15 +79,15 @@ func (d Dir) ReverseParamText() string {
 	return str
 }
 
-func (d Dir) HiddenParamText() string {
+func (f FilePageData) HiddenParamText() string {
 	str := "?hidden="
-	if d.ShowHidden {
+	if f.ShowHidden {
 		str += "false"
 	} else {
 		str += "true"
 	}
 	str += "&reverse="
-	if d.Reverse {
+	if f.Reverse {
 		str += "true"
 	} else {
 		str += "false"
@@ -105,13 +111,6 @@ func BoolToString(b bool) string {
 	}
 }
 
-func sanitiseRequestURI(requestURI string) string {
-	if requestURI == "/" {
-		requestURI = ""
-	}
-	return requestURI
-}
-
 type FileSize int64
 
 func (bytes FileSize) FormatSizeUnits() string {
@@ -130,7 +129,7 @@ func (bytes FileSize) FormatSizeUnits() string {
 	}
 }
 
-func getDir(dirPath string, requestPath string, reverseSort bool, showHidden bool) (Dir, error) {
+func getDir(dirPath string, requestPath string, reverseSort bool, showHidden bool, server *Server) (FilePageData, error) {
 	dirEntry, _ := os.ReadDir(dirPath)
 	parentPath := filepath.Dir(requestPath)
 	dirs := make([]DirEntry, 0)
@@ -154,25 +153,27 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 		return strings.ToLower(dirs[i].Name) < strings.ToLower(dirs[j].Name) != reverseSort
 	})
 	queryParams := fmt.Sprintf("?hidden=%s&reverse=%s", BoolToString(showHidden), BoolToString(reverseSort))
-	dirData := Dir{
-		Entries:     dirs,
-		Path:        requestPath,
-		ParentPath:  parentPath,
-		IsHome:      requestPath == "/files/",
-		Reverse:     reverseSort,
-		ShowHidden:  showHidden,
-		QueryParams: queryParams,
+	dirData := FilePageData{
+		Entries:      dirs,
+		Path:         requestPath,
+		ParentPath:   parentPath,
+		IsHome:       requestPath == "/files/",
+		Reverse:      reverseSort,
+		ShowHidden:   showHidden,
+		QueryParams:  queryParams,
+		AllowUploads: server.Uploads,
 	}
 	return dirData, nil
 }
 
 type Server struct {
-	Unsecure     bool
+	Uploads      bool
 	Port         int
 	Timeout      int
 	RootFolder   string
 	Server       http.Server
 	ShutdownChan chan struct{}
+	UploadJobs   map[string]string
 }
 
 func (s *Server) setupHTTPServer() {
@@ -189,53 +190,19 @@ func (s *Server) setupHTTPServer() {
 	connStateCh := make(chan struct{})
 	s.ShutdownChan = make(chan struct{})
 
-	//corsMiddleware := func(next http.Handler) http.Handler {
-	//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-	//		w.Header().Set("Access-Control-Allow-Origin", "*")
-	//		w.Header().Set("Access-Control-Allow-Methods", "*")
-	//		w.Header().Set("Access-Control-Allow-Headers", "*")
-	//		if r.Method == http.MethodOptions {
-	//			// Return a simple OK response for preflight requests
-	//			w.WriteHeader(http.StatusOK)
-	//			return
-	//		}
-	//		next.ServeHTTP(w, r)
-	//	})
-	//}
-
-	//serveMuxWithCORS := corsMiddleware(serveMux)
-
-	if s.Unsecure {
-		s.Server = http.Server{
-			Addr:              fmt.Sprintf(":%v", s.Port),
-			Handler:           serveMux,
-			ReadTimeout:       0,
-			ReadHeaderTimeout: 0,
-			WriteTimeout:      0,
-			IdleTimeout:       0,
-			MaxHeaderBytes:    1024 * 1024,
-			ConnState: func(c net.Conn, cs http.ConnState) {
-				if cs == http.StateActive {
-					connStateCh <- struct{}{}
-				}
-			},
-		}
-	} else {
-		cert, _ := certsFS.ReadFile("certs/cert.pem")
-		certKey, _ := certsFS.ReadFile("certs/key.pem")
-
-		certPair, _ := tls.X509KeyPair(cert, certKey)
-		s.Server = http.Server{
-			Addr: fmt.Sprintf(":%v", s.Port),
-			TLSConfig: &tls.Config{
-				Certificates: []tls.Certificate{certPair},
-			},
-			Handler: serveMux, ConnState: func(c net.Conn, cs http.ConnState) {
-				if cs == http.StateActive {
-					connStateCh <- struct{}{}
-				}
-			}}
-	}
+	cert, _ := certsFS.ReadFile("certs/cert.pem")
+	certKey, _ := certsFS.ReadFile("certs/key.pem")
+	certPair, _ := tls.X509KeyPair(cert, certKey)
+	s.Server = http.Server{
+		Addr: fmt.Sprintf(":%v", s.Port),
+		TLSConfig: &tls.Config{
+			Certificates: []tls.Certificate{certPair},
+		},
+		Handler: serveMux, ConnState: func(c net.Conn, cs http.ConnState) {
+			if cs == http.StateActive {
+				connStateCh <- struct{}{}
+			}
+		}}
 
 	go func() {
 		timer := time.NewTimer(time.Duration(s.Timeout) * time.Second)
@@ -246,6 +213,7 @@ func (s *Server) setupHTTPServer() {
 				timer.Reset(time.Duration(s.Timeout) * time.Second)
 			case <-timer.C:
 				log.Println("Performing shutdown")
+				s.Cleanup()
 				if err := s.Server.Shutdown(context.Background()); err != nil {
 					log.Printf("[ERROR]: HTTP Server shutdown: %v", err)
 				}
@@ -272,7 +240,7 @@ func (s *Server) setupHTTPServer() {
 			return
 		}
 		if stat.IsDir() {
-			dirData, _ := getDir(joinedPath, r.URL.Path, reverse, showHidden)
+			dirData, _ := getDir(joinedPath, r.URL.Path, reverse, showHidden, s)
 			var paths []string
 			for _, dd := range dirData.Entries {
 				paths = append(paths, path.Join(joinedPath, dd.Name))
@@ -322,52 +290,11 @@ func (s *Server) setupHTTPServer() {
 		}
 	})
 
-	//serveMux.HandleFunc("/upload_file/", func(w http.ResponseWriter, r *http.Request) {
-	//	w.Header().Set("Access-Control-Allow-Origin", "*")
-	//	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	//	w.Header().Set("Access-Control-Allow-Headers", "*")
-	//	if r.Method == "OPTIONS" {
-	//		return
-	//	}
-	//	fileName := r.Header.Get("X-File-Name")
-	//	fullPath := path.Join("tmp", fileName)
-	//	log.Println("[INFO]: endpoint '/upload_file/':", fullPath)
-	//	var file *os.File
-	//	if r.Header.Get("X-Chunk-Start") == "0" {
-	//		log.Println("[INFO]: endpoint '/upload_file/': creating file")
-	//		fileCreate, err := os.Create(fullPath)
-	//		if err != nil {
-	//			log.Println("[ERROR]: endpoint '/upload_file/':", err)
-	//			w.WriteHeader(http.StatusInternalServerError)
-	//			return
-	//		}
-	//		file = fileCreate
-	//	} else {
-	//		fileOpen, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY, 0644)
-	//		if err != nil {
-	//			log.Println("[ERROR]: endpoint '/upload_file/':", err)
-	//			w.WriteHeader(http.StatusInternalServerError)
-	//			return
-	//		}
-	//		file = fileOpen
-	//	}
-	//	defer file.Close()
-	//	buf := bufio.NewReader(r.Body)
-	//	b := new(bytes.Buffer)
-	//	io.Copy(b, buf)
-	//	_, writeErr := file.Write(b.Bytes())
-	//	if writeErr != nil {
-	//		log.Println("[ERROR]: endpoint '/upload_file/':", writeErr)
-	//		w.WriteHeader(http.StatusInternalServerError)
-	//		return
-	//	}
-	//	if r.Header.Get("X-Chunk-End") == r.Header.Get("X-Total-Size") {
-	//		log.Println("file has been uploaded")
-	//	}
-	//	w.WriteHeader(http.StatusOK)
-	//})
-
 	serveMux.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		if s.Uploads == false {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		if r.Method == "GET" {
 			data := UploadTemplateData{
 				Path: strings.TrimPrefix(r.URL.Query().Get("path"), "/files"),
@@ -376,29 +303,222 @@ func (s *Server) setupHTTPServer() {
 			err := t.Execute(w, data)
 			if err != nil {
 				log.Println(err)
+				return
 			}
 			return
 		} else if r.Method == "POST" {
+			var existsErr error
 			log.Println("[INFO]: endpoint '/upload':", r.URL.Path)
-			w.WriteHeader(200)
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) //1MB
-			w.Write([]byte("OK"))
+
+			start, existsErr := GetHeader(w, r, "Upload-Offset")
+			if existsErr != nil {
+				return
+			}
+			uploadIncomplete, existsErr := GetHeader(w, r, "Upload-Incomplete")
+			if existsErr != nil {
+				return
+			}
+			checksum, existsErr := GetHeader(w, r, "X-File-Checksum")
+			if existsErr != nil {
+				return
+			}
+			fileName, existsErr := GetQueryParam(w, r, "filename")
+			if existsErr != nil {
+				return
+			}
+			if result, decodeErr := url.QueryUnescape(fileName); decodeErr != nil {
+				log.Println("[ERROR]: endpoint '/upload':", decodeErr)
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte("Invalid file name"))
+				return
+			} else {
+				fileName = result
+			}
+			directoryPath, existsErr := GetQueryParam(w, r, "path")
+			if existsErr != nil {
+				return
+			}
+			cleanPath := path.Clean(path.Join(s.RootFolder, directoryPath))
+			tmpFilePath := path.Join(cleanPath, checksum)
+
+			var tmpFile *os.File
+			if start == "0" {
+				if createdFile, err := CreateFile(w, cleanPath, checksum); err != nil {
+					return
+				} else {
+					tmpFile = createdFile
+				}
+				s.UploadJobs[checksum] = tmpFilePath
+			} else {
+				openFile, err := os.OpenFile(tmpFilePath, os.O_APPEND|os.O_WRONLY, 0644)
+				if err != nil {
+					log.Println("[ERROR]: endpoint '/upload':", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				tmpFile = openFile
+			}
+			defer tmpFile.Close()
+
+			writeErr := WriteBufferToFile(w, tmpFile, r.Body)
+			if writeErr != nil {
+				return
+			}
+
+			if uploadIncomplete == "false" {
+				log.Println("file has been uploaded")
+				log.Println("[INFO]: file has been uploaded")
+				log.Println("[INFO]: Moving file to:" + filepath.Join(cleanPath, fileName))
+
+				tmpFile.Close()
+				checksumErr := CheckAgainstChecksum(w, tmpFilePath, checksum)
+				if checksumErr != nil {
+					return
+				}
+
+				moveErr := os.Rename(tmpFilePath, filepath.Join(cleanPath, fileName))
+				if moveErr != nil {
+					log.Println("[ERROR]: endpoint '/upload':", moveErr)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				delete(s.UploadJobs, checksum)
+			}
+			w.WriteHeader(http.StatusOK)
+
 		} else {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
+
+	serveMux.HandleFunc("/cancel_upload", func(w http.ResponseWriter, r *http.Request) {
+		log.Println("[INFO]: endpoint '/cancel_upload':", r.URL.Path)
+		if !s.Uploads {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		filehash := r.URL.Query().Get("filehash")
+		existsErr := CheckExists(w, filehash, "filehash")
+		if existsErr != nil {
+			return
+		}
+		if path := s.UploadJobs[filehash]; path != "" {
+			log.Println("[INFO]: endpoint '/cancel_upload': removing ", path)
+			err := os.Remove(path)
+			if err != nil {
+				log.Println("[ERROR]: endpoint '/cancel_upload':", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			delete(s.UploadJobs, filehash)
+		}
+
+	})
+}
+
+func (s *Server) Cleanup() {
+	for key, value := range s.UploadJobs {
+		log.Println(key, value)
+		_, statErr := os.Stat(value)
+		log.Println("Error", statErr)
+		if statErr == nil {
+			log.Println("Removing incomplete file: ", value)
+			rmErr := os.Remove(value)
+			if rmErr != nil {
+				log.Println("[ERROR]: Cleanup job: ", rmErr)
+				continue 
+			}
+			delete(s.UploadJobs, key)
+		}
+	}
 }
 
 func (s *Server) Start() {
 	s.setupHTTPServer()
-	if s.Unsecure {
-		if err := s.Server.ListenAndServe(); err != http.ErrServerClosed {
-			log.Fatalf("HTTP server ListenAndServe: %v", err)
-		}
-	} else {
-		if err := s.Server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
-			log.Fatalf("HTTP server ListenAndServe: %v", err)
-		}
+	if err := s.Server.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+		log.Fatalf("HTTP server ListenAndServe: %v", err)
 	}
 	<-s.ShutdownChan
+}
+
+func GetHeader(w http.ResponseWriter, r *http.Request, key string) (string, error) {
+	value := r.Header.Get(key)
+	err := CheckExists(w, value, key)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func GetQueryParam(w http.ResponseWriter, r *http.Request, key string) (string, error) {
+	value := r.URL.Query().Get(key)
+	err := CheckExists(w, value, key)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func CheckExists(w http.ResponseWriter, value string, valueName string) error {
+	if value == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, err := w.Write([]byte("missing param: " + valueName))
+		if err != nil {
+			log.Println("[ERROR]: endpoint '/upload':", err)
+			return err
+		}
+		return fmt.Errorf("missing param: %s", valueName)
+	}
+	return nil
+}
+
+func CreateFile(w http.ResponseWriter, filePath string, fileName string) (*os.File, error) {
+	_, statErr := os.Stat(filePath)
+	if os.IsNotExist(statErr) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, writeErr := w.Write([]byte(fmt.Sprintf("directory path %s does not exist", filePath)))
+		if writeErr != nil {
+			log.Println("[ERROR]: endpoint '/upload':", writeErr)
+		}
+	}
+	fileCreate, err := os.Create(path.Join(filePath, fileName))
+	if err != nil {
+		log.Println("[ERROR]: endpoint '/upload_file/':", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return &os.File{}, err
+	}
+	return fileCreate, nil
+}
+
+func WriteBufferToFile(w http.ResponseWriter, file *os.File, body io.Reader) error {
+	buf := bufio.NewReader(body)
+	b := new(bytes.Buffer)
+	_, copyErr := io.Copy(b, buf)
+	if copyErr != nil {
+		log.Println("[ERROR]: endpoint '/upload':", copyErr)
+		w.WriteHeader(http.StatusInternalServerError)
+		return copyErr
+	}
+	_, writeErr := file.Write(b.Bytes())
+	if writeErr != nil {
+		log.Println("[ERROR]: endpoint '/upload_file/':", writeErr)
+		w.WriteHeader(http.StatusInternalServerError)
+		return writeErr
+	}
+	return nil
+}
+
+func CheckAgainstChecksum(w http.ResponseWriter, filePath string, checksum string) error {
+	hash := sha256.New()
+	file, _ := os.OpenFile(filePath, os.O_RDONLY, 0644)
+	io.Copy(hash, file)
+	transferredChecksum := hash.Sum(nil)
+	if checksum != hex.EncodeToString(transferredChecksum) {
+		log.Println("[ERROR]: endpoint '/upload':", "Checksum mismatch", checksum, hex.EncodeToString(transferredChecksum))
+		w.WriteHeader(http.StatusInternalServerError)
+		return fmt.Errorf("Checksum mismatch")
+	}
+	return nil
 }

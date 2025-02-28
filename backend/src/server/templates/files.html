@@ -67,6 +67,7 @@
 			Sort Alphabetically (Z-a)
 			{{ end }}
 		</div>
+		{{ if .AllowUploads }}
 		<div class="menu-item"
 			 hx-get="/upload?path={{.Path}}"
 			 hx-target="#modal"
@@ -74,6 +75,7 @@
 			 >
 			Upload File
 		</div>
+		{{ end }}
 	</div>
 </div>
 {{end}}
