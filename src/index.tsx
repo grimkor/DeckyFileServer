@@ -1,4 +1,4 @@
-import React, {ChangeEvent, useEffect, useRef, useState, VFC} from 'react';
+import React, {createContext,ChangeEvent, useEffect, useRef, useState, VFC, FC, useContext} from 'react';
 import {
     ButtonItem,
     definePlugin,
@@ -23,6 +23,29 @@ import {
 import {FaServer, FaHistory} from "react-icons/fa";
 import {IoMdAlert} from "react-icons/io";
 
+const MyContext = createContext({
+    value: 1,
+    increment: () => {},
+});
+const {Provider} = MyContext;
+
+function ContextProvider({children}) {
+    const [value, setValue] = useState(1);
+    const increment = () => {
+        console.log(value);
+        setValue(value+1);
+    }
+    return (
+        <Provider value={{value, increment}}>
+            {children}
+        </Provider>
+    )
+};
+
+function Counter({value}) {
+    return <span>{value}</span>
+}
+
 
 interface State {
     server_running: boolean,
@@ -38,6 +61,7 @@ interface State {
 const Content: VFC<{
     serverAPI: ServerAPI
 }> = ({serverAPI}) => {
+    const context = useContext(MyContext);
     const [state, setState] = useState<State>({
         server_running: false,
         directory: "/home/deck",
@@ -101,48 +125,64 @@ const Content: VFC<{
         })
     };
     return (
-        <PanelSection>
-            <PanelSectionRow>
-                <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server"/>
-                {state.error ? <div>{state.error}</div> : null}
-            </PanelSectionRow>
-            <PanelSectionRow>
-                <ButtonItem
-                    layout='below'
-                    disabled={state.server_running}
-                    onClick={() =>
-                        showModal(<SettingsPage
-                            port={state.port}
-                            directory={state.directory}
-                            history={state.history}
-                            allow_uploads={state.allow_uploads}
-                            serverAPI={serverAPI}
-                            handleSubmit={handleModalSubmit}
-                        />, window)}
-                >
-                    Settings
-                </ButtonItem>
-            </PanelSectionRow>
-            <PanelSectionRow>
-                <Field
-                    inlineWrap="shift-children-below"
-                    label="Server Address"
-                    bottomSeparator='none'
-                >
-                    http{state.allow_uploads ? 's' : ''}://steamdeck:{state.port}
-                </Field>
-                <Field inlineWrap="shift-children-below">
-                    http{state.allow_uploads ? 's' : ''}://{state.ip_address}:{state.port}
-                </Field>
-                <Field
-                    inlineWrap="shift-children-below"
-                    label="Directory"
-                    bottomSeparator='none'
-                >
-                    {state.directory}
-                </Field>
-            </PanelSectionRow>
-        </PanelSection>
+        <ContextProvider>
+            <PanelSection>
+                <PanelSectionRow>
+                    <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server"/>
+                    {state.error ? <div>{state.error}</div> : null}
+                </PanelSectionRow>
+                <PanelSectionRow>
+                    <ButtonItem
+                        layout='below'
+                        disabled={state.server_running}
+                        onClick={() =>
+                            showModal(<SettingsPage
+                                port={state.port}
+                                directory={state.directory}
+                                history={state.history}
+                                allow_uploads={state.allow_uploads}
+                                serverAPI={serverAPI}
+                                handleSubmit={handleModalSubmit}
+                            />, window)}
+                    >
+                        Settings
+                    </ButtonItem>
+                    <ButtonItem
+                        layout='below'
+                        disabled={state.server_running}
+                        onClick={() => context.increment()}
+                    >
+                        PRESS ME
+                    </ButtonItem>
+                </PanelSectionRow>
+                <PanelSectionRow>
+                    <Field
+                        inlineWrap="shift-children-below"
+                        label="Server Address"
+                        bottomSeparator='none'
+                    >
+                        http{state.allow_uploads ? 's' : ''}://steamdeck:{state.port}
+                    </Field>
+                    <Field inlineWrap="shift-children-below">
+                        http{state.allow_uploads ? 's' : ''}://{state.ip_address}:{state.port}
+                    </Field>
+                    <Field
+                        inlineWrap="shift-children-below"
+                        label="Directory"
+                        bottomSeparator='none'
+                    >
+                        {state.directory}
+                    </Field>
+                    <Field
+                        inlineWrap="shift-children-below"
+                        label="Directory"
+                        bottomSeparator='none'
+                    >
+                        <Counter value={context.value}/>
+                    </Field>
+                </PanelSectionRow>
+            </PanelSection>
+        </ContextProvider>
     )
 };
 
@@ -344,10 +384,14 @@ const SettingsPage: VFC<{
     );
 };
 
+const WithContext: VFC<{
+    serverAPI: ServerAPI
+}> = ({serverAPI}) => <ContextProvider><Content serverAPI={serverAPI} /></ContextProvider>;
+
 export default definePlugin((serverApi: ServerAPI) => {
     return {
         title: <div className={staticClasses.Title}>DeckyFileServer</div>,
-        content: <Content serverAPI={serverApi}/>,
+        content: <WithContext serverAPI={serverApi} />,
         icon: <FaServer/>,
         onDismount() {
         },
