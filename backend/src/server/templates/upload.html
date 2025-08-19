@@ -1,11 +1,11 @@
 <div id="modal-content" class="modal-content">
     <div class="upload-container">
-        <h2>Upload File</h2>
+        <h2>Upload Files</h2>
         <div class="file-input-container">
-            <button id="file-input-button" onclick="handleFileInputClick()" >Choose File</button>
-            <span id="file-name-text">No file selected</span>
+            <button id="file-input-button" onclick="handleFileInputClick()" >Choose Files</button>
+            <span id="file-name-text">No files selected</span>
             <span id="file-size-text"></span>
-            <input type="file" id="file-input" onchange="handleFile(event)">
+            <input type="file" id="file-input" onchange="handleFile(event)" multiple>
         </div>
         <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Upload</button>
         <button class="cancel-button" id="cancel-button" onclick="cancelUpload()" disabled>Cancel</button>
@@ -13,6 +13,9 @@
             <div id="progress-bar" class="progress-bar">
                 <span id="progress-bar-text" class="progress-bar-text">0%</span>
             </div>
+        </div>
+        <div id="file-progress-container" style="margin-top: 10px; display: none;">
+            <div id="file-progress-text" class="file-progress-text"></div>
         </div>
     </div>
 </div>
@@ -75,53 +78,85 @@
             }
         });
     }
-    
+
     function handleFileInputClick() {
         fileInput.click();
     }
 
     function handleFile(event) {
-        const file = event?.target?.files?.[0];
-        if (file) {
-            document.getElementById('file-name-text').innerText = file.name;
-            document.getElementById('file-size-text').innerText = `(${convertFileSize(file.size)})`;
+        const files = event?.target?.files;
+        if (files && files.length > 0) {
+            document.getElementById('file-name-text').innerText = files.length + " file(s) selected";
+            let totalSize = 0;
+            for (let i = 0; i < files.length; i++) {
+                totalSize += files[i].size;
+            }
+            document.getElementById('file-size-text').innerText = `(${convertFileSize(totalSize)})`;
         } else {
-            document.getElementById('file-name-text').innerText = "Select File";
+            document.getElementById('file-name-text').innerText = "Select Files";
             document.getElementById('file-size-text').innerText = "";
         }
-        submitButton.disabled = !event?.target?.files?.[0];
+        submitButton.disabled = !files || files.length === 0;
         progressContainer.style.display = 'none';
         setProgress(0);
     }
 
     async function uploadFile() {
         submitButton.disabled = true;
-        const file = fileInput.files[0];
+        const files = fileInput.files;
+        if (!files || files.length === 0) return;
+        const fileProgressContainer = document.getElementById('file-progress-container');
+        const fileProgressText = fileProgressContainer.querySelector('#file-progress-text');
+        const startTime = performance.now();
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            checksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+            let totalSize = 0;
+            for (let i = 0; i < files.length; i++) {
+                totalSize += files[i].size;
+            }
+            let uploadedSize = 0;
+            let completedFiles = 0;
+            fileProgressContainer.style.display = 'block';
+            fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
 
-            fileInput.disabled = true;
-            submitButton.disabled = true;
-            cancelButton.style.display = 'block';
-            submitButton.style.display = 'none';
-            progressContainer.style.display = 'block';
-            let start = 0;
-            const totalChunks = Math.ceil(file.size / chunkSize);
-            setIsUploading(true);
-            while (start < file.size && IS_UPLOADING) {
-                const end = Math.min(start + chunkSize, file.size);
-                const chunk = file.slice(start, end);
-                setProgress(Math.floor((end / file.size) * 100));
-                await uploadChunk(chunk, start, end, totalChunks, checksum, file);
-                start = end;
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const arrayBuffer = await file.arrayBuffer();
+                const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                checksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+
+                fileInput.disabled = true;
+                submitButton.disabled = true;
+                cancelButton.style.display = 'block';
+                submitButton.style.display = 'none';
+                progressContainer.style.display = 'block';
+
+                let start = 0;
+                const totalChunks = Math.ceil(file.size / chunkSize);
+                setIsUploading(true);
+
+                while (start < file.size && IS_UPLOADING) {
+                    const end = Math.min(start + chunkSize, file.size);
+                    const chunk = file.slice(start, end);
+                    const elapsedTime = (performance.now() - startTime) / 1000;
+                    const bitrate = (uploadedSize + ((end / file.size) * file.size)) / elapsedTime;
+                    setProgress(Math.floor((uploadedSize + ((end / file.size) * file.size)) / totalSize * 100), bitrate);
+                    await uploadChunk(chunk, start, end, totalChunks, checksum, file);
+                    start = end;
+                }
+
+                completedFiles++;
+                uploadedSize += file.size;
+                fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
             }
         } catch (e) {
             console.error(e);
         } finally {
             setIsUploading(false);
+            fileInput.value = '';
+            document.getElementById('file-name-text').innerText = "Select Files";
+            document.getElementById('file-size-text').innerText = "";
+            fileProgressContainer.style.display = 'none';
         }
     }
 
@@ -152,9 +187,9 @@
         }
     }
 
-    function setProgress(value) {
+    function setProgress(value, bitrate) {
         progressBar.style.width = value + "%";
-        progressBarText.innerHTML = value + "%";
+        progressBarText.innerHTML = value + `% (${convertFileSize(bitrate)}/s)`;
     }
 
     document.getElementById("modal").style.display = "block";

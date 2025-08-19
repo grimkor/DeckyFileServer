@@ -227,6 +227,26 @@ body {
     align-items: stretch;
 }
 
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+.file-size {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.file-progress {
+    font-size: 0.9em;
+    color: #4CAF50;
+}
+
 .file-row {
     display: flex;
     position: relative;
