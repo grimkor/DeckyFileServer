@@ -16,11 +16,13 @@ func main() {
 	var timeout int
 	var verbose bool
 	var allowUploads bool
+	var disableThumbnails bool
 	flag.BoolVar(&verbose, "verbose", false, "log output to stdout (default: false)")
 	flag.StringVar(&rootFolder, "f", "/home/david", "Root folder to share")
 	flag.IntVar(&port, "p", 8000, "Port number to listen to")
 	flag.IntVar(&timeout, "t", 60, "Inactivity timeout (in seconds)")
 	flag.BoolVar(&allowUploads, "uploads", false, "Allow uploads from the web page (default: false)")
+	flag.BoolVar(&disableThumbnails, "disablethumbnails", false, "Disable generating thumbnails for images & videos (default: false)")
 	flag.Parse()
 
 	logger.SetupLogger("/tmp/deckyfileserver.log", verbose)
@@ -41,6 +43,7 @@ func main() {
 
 	s := server.Server{
 		Uploads:    allowUploads,
+		DisableThumbnails:    disableThumbnails,
 		Port:       port,
 		Timeout:    timeout,
 		RootFolder: rootFolder,

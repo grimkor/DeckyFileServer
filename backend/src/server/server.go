@@ -143,7 +143,7 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 			IsDir:     entry.IsDir(),
 			Size:      FileSize(info.Size()),
 			Path:      path.Join(requestPath, entry.Name()),
-			Thumbnail: thumbGen.IsCompatibleType(entry.Name()),
+			Thumbnail: !server.DisableThumbnails && thumbGen.IsCompatibleType(entry.Name()),
 		})
 	}
 	sort.Slice(dirs[:], func(i, j int) bool {
@@ -167,13 +167,14 @@ func getDir(dirPath string, requestPath string, reverseSort bool, showHidden boo
 }
 
 type Server struct {
-	Uploads      bool
-	Port         int
-	Timeout      int
-	RootFolder   string
-	Server       http.Server
-	ShutdownChan chan struct{}
-	UploadJobs   map[string]string
+	Uploads           bool
+	DisableThumbnails bool
+	Port              int
+	Timeout           int
+	RootFolder        string
+	Server            http.Server
+	ShutdownChan      chan struct{}
+	UploadJobs        map[string]string
 }
 
 func (s *Server) setupHTTPServer() {
@@ -245,7 +246,9 @@ func (s *Server) setupHTTPServer() {
 			for _, dd := range dirData.Entries {
 				paths = append(paths, path.Join(joinedPath, dd.Name))
 			}
-			go thumbGen.StartBatchJob(paths)
+			if !s.DisableThumbnails {
+				go thumbGen.StartBatchJob(paths)
+			}
 			if r.Header.Get("HX-Request") == "true" {
 				t := template.Must(template.ParseFS(templatesFS, "templates/files.html"))
 				err := t.ExecuteTemplate(w, "content", dirData)

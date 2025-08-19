@@ -40,6 +40,51 @@
 	{{ end }}
 	<hr />
 </div>
+<script>
+	(() => {
+		const fileList = document.getElementById('file-list');
+
+		['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+			fileList.addEventListener(eventName, preventDefaults, false);
+		});
+
+		['dragenter', 'dragover'].forEach(eventName => {
+			fileList.addEventListener(eventName, highlight, false);
+		});
+
+		['dragleave', 'drop'].forEach(eventName => {
+			fileList.addEventListener(eventName, unhighlight, false);
+		});
+
+		fileList.addEventListener('drop', handleDrop, false);
+
+		function preventDefaults(e) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
+
+		function highlight() {
+			fileList.classList.add('drag-over');
+		}
+
+		function unhighlight() {
+			fileList.classList.remove('drag-over');
+		}
+
+		function handleDrop(e) {
+			console.log('dropped', e);
+			const dt = e.dataTransfer;
+			const files = dt.files;
+
+			if (files.length > 0) {
+				console.log('Dropped files:', files);
+				htmx.ajax('GET', `/upload?path=${window.location.pathname}`, "#modal")
+					.then(() => setFiles?.(files)); 
+
+			}
+		}
+	})();
+</script>
 {{end}}
 
 {{define "menu"}}

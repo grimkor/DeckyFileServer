@@ -214,23 +214,17 @@ func (tg *ThumbnailGenerator) GenerateThumbnail(filePath string) (image.Image, e
 			tg.Cache.Add(filePath, img)
 		}
 		return img, err
-		// if img != nil {
-		// 	tg.Cache.Add(filePath, img)
-		// }
 	} else if strings.HasPrefix(ext, "video") {
 		img, err := tg.CreateVideoThumbnail(filePath)
 		if err != nil {
-			log.Println("GenerateThumbnail => ERROR", filePath, err)
+			log.Println("[ERROR]: GenerateThumbnail => CreateVideoThumbnail()", filePath, img, err)
+			tg.Cache.Add(filePath, nil)
 		}
 		if img != nil {
 			tg.Cache.Add(filePath, img)
 		}
 		return img, err
 	}
-	// if err != nil {
-	// 	log.Println("[ERROR]: GenerateThumbnail", err)
-	// 	return nil, err
-	// }
 	return nil, errors.New("Request to generate thumbnail but not image/video")
 }
 

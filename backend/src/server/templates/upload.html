@@ -1,60 +1,117 @@
 <div id="modal-content" class="modal-content">
     <div class="upload-container">
-        <h2>Upload File</h2>
+        <h2>Upload Files</h2>
         <div class="file-input-container">
-            <button id="file-input-button" onclick="handleFileInputClick()" >Choose File</button>
-            <span id="file-name-text">No file selected</span>
+            <button id="file-input-button" onclick="handleFileInputClick()" >Choose Files</button>
+            <span id="file-name-text">No files selected</span>
             <span id="file-size-text"></span>
-            <input type="file" id="file-input" onchange="handleFile(event)">
+            <input type="file" id="file-input" onchange="handleFileChange(event)" multiple>
         </div>
         <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Upload</button>
         <button class="cancel-button" id="cancel-button" onclick="cancelUpload()" disabled>Cancel</button>
-        <div class="progress-container" id="progress-container">
-            <div id="progress-bar" class="progress-bar">
-                <span id="progress-bar-text" class="progress-bar-text">0%</span>
-            </div>
+        <div id="file-progress-container" style="margin-top: 10px; display: none;">
+            <div id="file-progress-text" class="file-progress-text"></div>
+        </div>
+        <div class="progress-bars-container" id="progress-bars-container">
         </div>
     </div>
 </div>
 <script>
-    var IS_UPLOADING = false;
-    var checksum;
     var chunkSize = 1024 * 1024; // 1MB
 
-    var fileInput = document.getElementById('file-input');
-    var progressContainer = document.getElementById('progress-container');
-    var progressBar = document.getElementById('progress-bar');
-    var progressBarText = document.getElementById('progress-bar-text');
-    var submitButton = document.getElementById('submit-button');
-    var cancelButton = document.getElementById('cancel-button');
-    var modal = document.getElementById('modal');
-
-    modal.addEventListener("click", handleModalClick);
-    function handleModalClick(e) {
-        if (e.target !== modal) return;
-        if (IS_UPLOADING) {
-            IS_UPLOADING = !confirm("Cancel Upload?");
-        }
-        if (IS_UPLOADING) return;
-        cancelUpload();
-        modal.style.display = "none";
-        modal.removeEventListener("click", handleModalClick);
-        checksum = null;
+    function UploadController(maxUploads) {
+        this.queue = [];
+        this.maxUploads = maxUploads;
+        this.checksums = [];
+        this.activeJobCount = 0;
+        this.completedJobCount = 0;
+        this.uploading = false;
     }
 
-    function setIsUploading(uploading) {
-        IS_UPLOADING = uploading;
+    UploadController.prototype.AddQueue = function(queue) {
+        this.queue = [...queue];
+    }
+
+    UploadController.prototype.ProcessQueue = function() {
+        while(this.activeJobCount + 1 <= this.maxUploads) {
+            const nextItem = this.queue.pop();
+            if (!nextItem) {
+                break;
+            }
+            this.activeJobCount++;
+            this.Upload(nextItem);
+        }
+    }
+
+    UploadController.prototype.Upload = async function(file) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const thisChecksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+            this.checksums.push(thisChecksum);
+
+            fileInput.disabled = true;
+            submitButton.disabled = true;
+            cancelButton.style.display = 'block';
+            submitButton.style.display = 'none';
+            progressBarsContainer.style.display = 'block';
+            const progressBar = new ProgressBar(file.name);
+
+            let start = 0;
+            const startTime = performance.now();
+            const totalChunks = Math.ceil(file.size / chunkSize);
+
+            while (start < file.size && this.uploading) {
+                const end = Math.min(start + chunkSize, file.size);
+                const chunk = file.slice(start, end);
+                const elapsedTime = (performance.now() - startTime) / 1000;
+                const bitrate = ((end / file.size) * file.size) / elapsedTime;
+                progressBar.setProgress(Math.floor((start / file.size) * 100), bitrate);
+                await uploadChunk(chunk, start, end, totalChunks, thisChecksum, file);
+                start = end;
+            }
+            progressBar.remove();
+            if (this.uploading) {
+                this.ProcessResult();
+            }
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    UploadController.prototype.ProcessResult = function() {
+        this.activeJobCount--;
+        this.completedJobCount++;
+        //fileProgressContainer.style.display = 'block';
+        fileProgressText.innerText = `${this.queue.length + this.activeJobCount} files remaining.`;
+        if (this.queue.length && this.uploading) {
+            this.ProcessQueue();
+        } else if (this.activeJobCount === 0) {
+            this.SetUploading(false);
+            fileProgressText.innerText = "Uploading complete.";
+        }
+    }
+
+    UploadController.prototype.SetUploading = function(uploading) {
+        if (uploading) {
+            this.activeJobCount = 0;
+        }
+        this.uploading = uploading;
+        fileInput.disabled = uploading;
         submitButton.disabled = uploading;
+        cancelButton.style.display = uploading ? 'block' : 'none';
         cancelButton.disabled = !uploading;
         submitButton.style.display = uploading ? 'none' : 'block';
-        cancelButton.style.display = uploading ? 'block' : 'none';
+        progressBarsContainer.style.display = uploading ? 'block' : 'none';
+        if (this.uploading) this.ProcessQueue();
+        if (!this.uploading) this.cancelUpload();
     }
 
-    async function cancelUpload() {
-        if (!checksum) return;
-        return new Promise((resolve, reject) => {
+    UploadController.prototype.cancelUpload = function() {
+        const cancels = this.checksums.map(chk => new Promise((resolve, reject) => {
             try {
-                const url = "/cancel_upload?filehash=" + encodeURIComponent(checksum);
+                const url = "/cancel_upload?filehash=" + encodeURIComponent(chk);
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
                 xhr.onload = () => {
@@ -68,60 +125,96 @@
                     reject(new Error('Network error occurred.'));
                 };
                 xhr.send();
-                progressBarText.innerText = "Cancelled!";
                 setIsUploading(false);
             } catch (e) {
                 console.error(e);
             }
-        });
+        }));
+        this.checksums = [];
     }
-    
+
+    var uploadController = new UploadController(3);
+
+    var fileInput = document.getElementById('file-input');
+    var fileProgressContainer = document.getElementById('file-progress-container');
+    var fileProgressText = fileProgressContainer.querySelector('#file-progress-text');
+    var progressBarsContainer = document.getElementById("progress-bars-container");
+    var submitButton = document.getElementById('submit-button');
+    var cancelButton = document.getElementById('cancel-button');
+    var modal = document.getElementById('modal');
+
+    modal.addEventListener("click", handleModalClick);
+    function handleModalClick(e) {
+        if (e.target !== modal) return;
+        if (uploadController.uploading) {
+            uploadController.SetUploading(!confirm("Cancel Upload?"));
+        }
+        if (uploadController.uploading) return;
+        modal.style.display = "none";
+        modal.removeEventListener("click", handleModalClick);
+    }
+
+    function setIsUploading(uploading) {
+        IS_UPLOADING = uploading;
+        submitButton.disabled = uploading;
+        cancelButton.disabled = !uploading;
+        submitButton.style.display = uploading ? 'none' : 'block';
+        cancelButton.style.display = uploading ? 'block' : 'none';
+    }
+
+    async function cancelUpload() {
+        uploadController.SetUploading(false);
+        fileProgressText.innerText = "Cancelled!";
+    }
+
     function handleFileInputClick() {
         fileInput.click();
     }
 
-    function handleFile(event) {
-        const file = event?.target?.files?.[0];
-        if (file) {
-            document.getElementById('file-name-text').innerText = file.name;
-            document.getElementById('file-size-text').innerText = `(${convertFileSize(file.size)})`;
+    function handleFileChange(event) {
+        const files = event?.target?.files;
+        if (files && files.length > 0) {
+            setFiles(files);
+        }
+    }
+
+    function setFiles(files) {
+        if (files?.length) {
+            fileInput.files = files;
+            document.getElementById('file-name-text').innerText = files.length + " file(s) selected";
+            let totalSize = 0;
+            for (let i = 0; i < files.length; i++) {
+                totalSize += files[i].size;
+            }
+            document.getElementById('file-size-text').innerText = `(${convertFileSize(totalSize)})`;
         } else {
-            document.getElementById('file-name-text').innerText = "Select File";
+            document.getElementById('file-name-text').innerText = "Select Files";
             document.getElementById('file-size-text').innerText = "";
         }
-        submitButton.disabled = !event?.target?.files?.[0];
-        progressContainer.style.display = 'none';
-        setProgress(0);
+        submitButton.disabled = !files || files.length === 0;
+        progressBarsContainer.style.display = 'none';
     }
 
     async function uploadFile() {
         submitButton.disabled = true;
-        const file = fileInput.files[0];
+        const files = fileInput.files;
+        if (!files || files.length === 0) return;
+        const startTime = performance.now();
         try {
-            const arrayBuffer = await file.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            checksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-
-            fileInput.disabled = true;
-            submitButton.disabled = true;
-            cancelButton.style.display = 'block';
-            submitButton.style.display = 'none';
-            progressContainer.style.display = 'block';
-            let start = 0;
-            const totalChunks = Math.ceil(file.size / chunkSize);
-            setIsUploading(true);
-            while (start < file.size && IS_UPLOADING) {
-                const end = Math.min(start + chunkSize, file.size);
-                const chunk = file.slice(start, end);
-                setProgress(Math.floor((end / file.size) * 100));
-                await uploadChunk(chunk, start, end, totalChunks, checksum, file);
-                start = end;
+            let totalSize = 0;
+            for (let i = 0; i < files.length; i++) {
+                totalSize += files[i].size;
             }
+            let uploadedSize = 0;
+            let completedFiles = 0;
+            fileProgressContainer.style.display = 'block';
+            fileProgressText.innerText = `${files.length} files remaining.`;
+            uploadController.AddQueue(files);
+            uploadController.SetUploading(true);
+
         } catch (e) {
             console.error(e);
         } finally {
-            setIsUploading(false);
         }
     }
 
@@ -152,9 +245,10 @@
         }
     }
 
-    function setProgress(value) {
-        progressBar.style.width = value + "%";
-        progressBarText.innerHTML = value + "%";
+    function setProgress(value, bitrate, id) {
+        if (id != 0) return;
+        progressBars[id].style.width = value + "%";
+        progressBarTexts[id].innerHTML = value + `% (${convertFileSize(bitrate)}/s)`;
     }
 
     document.getElementById("modal").style.display = "block";
@@ -168,6 +262,41 @@
         if (size >= MB) return `${(size / MB).toFixed(2)} MB`;
         if (size >= KB) return `${(size / KB).toFixed(2)} KB`;
         return `${size} Bytes`;
+    }
+
+    function ProgressBar(fileName) {
+        this.container = document.createElement('div');
+        this.container.className = "progress-container";
+        progressBarsContainer.appendChild(this.container);
+
+        this.progressTextContainer = document.createElement('div');
+        this.progressTextContainer.className = "progress-text-container";
+        this.container.appendChild(this.progressTextContainer);
+
+        this.progressBarContainer = document.createElement('div');
+        this.progressBarContainer.className = "progress-bar-container";
+        this.container.appendChild(this.progressBarContainer);
+
+        this.progressBar = document.createElement('div');
+        this.progressBar.className = "progress-bar";
+        this.progressBarContainer.appendChild(this.progressBar);
+
+        var name = document.createElement('span');
+        name.className = "progress-text-name";
+        name.innerText = fileName;
+        name.title = fileName;
+        this.progressTextContainer.appendChild(name);
+        
+        this.text = document.createElement('span');
+        this.text.className = "progress-text-speed";
+        this.progressTextContainer.appendChild(this.text);
+    }
+    ProgressBar.prototype.setProgress = function(value, bitrate) {
+        this.progressBar.style.width = value + "%";
+        this.text.innerHTML = `(${convertFileSize(bitrate)}/s)`;
+    }
+    ProgressBar.prototype.remove = function() {
+        this.container.parentElement.removeChild(this.container);
     }
 
 </script>

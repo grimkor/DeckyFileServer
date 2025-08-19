@@ -67,7 +67,6 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
-/*CSS reset */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -244,7 +243,6 @@ body {
     overflow: hidden;
 }
 
-/*not last child*/
 .file-row:not(:last-child) {
     border-bottom: #ddd 1px solid;
 }
@@ -308,4 +306,56 @@ body {
         height: 60px;
     }
 
+}
+
+.file-list {
+    position: relative;
+}
+
+.drag-over {
+    background-color: rgba(100, 149, 237, 0.2) !important;
+    border: 2px dashed #6495ED;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.drag-over .file-row {
+    opacity: 0.7;
+}
+
+.drop-target {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(100, 149, 237, 0.1);
+    border: 2px dashed #6495ED;
+    border-radius: 8px;
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+}
+
+.drop-target.active {
+    display: block;
+}
+
+.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.drop-indicator {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background-color: #6495ED;
+    border-radius: 2px;
+    z-index: 1001;
+    display: none;
+}
+
+.drop-indicator.active {
+    display: block;
 }
