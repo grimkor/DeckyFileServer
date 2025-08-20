@@ -5,7 +5,7 @@
             <button id="file-input-button" onclick="handleFileInputClick()" >Choose Files</button>
             <span id="file-name-text">No files selected</span>
             <span id="file-size-text"></span>
-            <input type="file" id="file-input" onchange="handleFile(event)" multiple>
+            <input type="file" id="file-input" onchange="handleFileChange(event)" multiple>
         </div>
         <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Upload</button>
         <button class="cancel-button" id="cancel-button" onclick="cancelUpload()" disabled>Cancel</button>
@@ -83,9 +83,16 @@
         fileInput.click();
     }
 
-    function handleFile(event) {
+    function handleFileChange(event) {
         const files = event?.target?.files;
         if (files && files.length > 0) {
+            setFiles(files);
+        }
+    }
+
+    function setFiles(files) {
+        if (files?.length) {
+            fileInput.files = files;
             document.getElementById('file-name-text').innerText = files.length + " file(s) selected";
             let totalSize = 0;
             for (let i = 0; i < files.length; i++) {
