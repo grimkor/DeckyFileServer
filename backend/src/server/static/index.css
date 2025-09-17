@@ -366,9 +366,19 @@ body {
     overflow: hidden;
 }
 
-.progress-container {
+.progress-bars-container {
     position: relative;
     display: none;
+    width: 100%;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.progress-container {
+    position: relative;
+    display: block;
     width: 100%;
     background-color: #ddd;
     border-radius: 25px;
@@ -390,6 +400,7 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    white-space: nowrap;
 }
 
 .file-input-container {

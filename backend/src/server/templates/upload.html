@@ -9,55 +9,113 @@
         </div>
         <button class="submit-button" id="submit-button" onclick="uploadFile()" disabled>Upload</button>
         <button class="cancel-button" id="cancel-button" onclick="cancelUpload()" disabled>Cancel</button>
-        <div class="progress-container" id="progress-container">
-            <div id="progress-bar" class="progress-bar">
-                <span id="progress-bar-text" class="progress-bar-text">0%</span>
-            </div>
-        </div>
         <div id="file-progress-container" style="margin-top: 10px; display: none;">
             <div id="file-progress-text" class="file-progress-text"></div>
+        </div>
+        <div class="progress-bars-container" id="progress-bars-container">
         </div>
     </div>
 </div>
 <script>
-    var IS_UPLOADING = false;
-    var checksum;
     var chunkSize = 1024 * 1024; // 1MB
 
-    var fileInput = document.getElementById('file-input');
-    var progressContainer = document.getElementById('progress-container');
-    var progressBar = document.getElementById('progress-bar');
-    var progressBarText = document.getElementById('progress-bar-text');
-    var submitButton = document.getElementById('submit-button');
-    var cancelButton = document.getElementById('cancel-button');
-    var modal = document.getElementById('modal');
-
-    modal.addEventListener("click", handleModalClick);
-    function handleModalClick(e) {
-        if (e.target !== modal) return;
-        if (IS_UPLOADING) {
-            IS_UPLOADING = !confirm("Cancel Upload?");
-        }
-        if (IS_UPLOADING) return;
-        cancelUpload();
-        modal.style.display = "none";
-        modal.removeEventListener("click", handleModalClick);
-        checksum = null;
+    function UploadController(maxUploads) {
+        this.queue = [];
+        this.maxUploads = maxUploads;
+        this.checksums = [];
+        this.activeJobCount = 0;
+        this.completedJobCount = 0;
+        this.uploading = false;
     }
 
-    function setIsUploading(uploading) {
-        IS_UPLOADING = uploading;
+    UploadController.prototype.AddQueue = function(queue) {
+        console.log("adding to queue", queue);
+        this.queue = [...queue];
+    }
+
+    UploadController.prototype.ProcessQueue = function() {
+        console.log("processing queue", this.queue, this);
+        while(this.activeJobCount + 1 <= this.maxUploads) {
+            const nextItem = this.queue.pop();
+            console.log("nextItem", this);
+            if (!nextItem) {
+                this.SetUploading(false);
+                break;
+            }
+            //this.SetUploading(true);
+            this.activeJobCount++;
+            this.Upload(nextItem);
+        }
+    }
+
+    UploadController.prototype.Upload = async function(file) {
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const thisChecksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+            this.checksums.push(thisChecksum);
+
+            fileInput.disabled = true;
+            submitButton.disabled = true;
+            cancelButton.style.display = 'block';
+            submitButton.style.display = 'none';
+            progressBarsContainer.style.display = 'block';
+            const progressBar = new ProgressBar();
+
+            let start = 0;
+            const startTime = performance.now();
+            const totalChunks = Math.ceil(file.size / chunkSize);
+            //setIsUploading(true);
+
+            while (start < file.size && this.uploading) {
+                const end = Math.min(start + chunkSize, file.size);
+                const chunk = file.slice(start, end);
+                const elapsedTime = (performance.now() - startTime) / 1000;
+                const bitrate = ((end / file.size) * file.size) / elapsedTime;
+                //setProgress(Math.floor((uploadedSize + ((end / file.size) * file.size)) / totalSize * 100), bitrate, index);
+                progressBar.setProgress(Math.floor((start / file.size) * 100), bitrate);
+                await uploadChunk(chunk, start, end, totalChunks, thisChecksum, file);
+                start = end;
+            }
+            progressBar.remove();
+            this.ProcessResult();
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    UploadController.prototype.ProcessResult = function() {
+        console.log("process result", this);
+        this.activeJobCount--;
+        this.completedJobCount++;
+        fileProgressContainer.style.display = 'block';
+        fileProgressText.innerText = `${this.queue.length + this.activeJobCount} files remaining.`;
+        if (this.queue.length && this.uploading) {
+            this.ProcessQueue();
+        } else if (this.activeJobCount === 0) {
+            this.SetUploading(false);
+        }
+
+    }
+
+    UploadController.prototype.SetUploading = function(uploading) {
+        this.uploading = uploading;
+        console.log("SetUploading:", uploading);
+        fileInput.disabled = uploading;
         submitButton.disabled = uploading;
+        cancelButton.style.display = uploading ? 'block' : 'none';
         cancelButton.disabled = !uploading;
         submitButton.style.display = uploading ? 'none' : 'block';
-        cancelButton.style.display = uploading ? 'block' : 'none';
+        progressBarsContainer.style.display = uploading ? 'block' : 'none';
+        if (this.uploading) this.ProcessQueue();
+        if (!this.uploading) this.cancelUpload();
     }
 
-    async function cancelUpload() {
-        if (!checksum) return;
-        return new Promise((resolve, reject) => {
+    UploadController.prototype.cancelUpload = function() {
+        const cancels = this.checksums.map(chk => new Promise((resolve, reject) => {
             try {
-                const url = "/cancel_upload?filehash=" + encodeURIComponent(checksum);
+                const url = "/cancel_upload?filehash=" + encodeURIComponent(chk);
                 const xhr = new XMLHttpRequest();
                 xhr.open('POST', url, true);
                 xhr.onload = () => {
@@ -71,12 +129,80 @@
                     reject(new Error('Network error occurred.'));
                 };
                 xhr.send();
-                progressBarText.innerText = "Cancelled!";
+                //progressBarText2.innerText = "Cancelled!";
                 setIsUploading(false);
             } catch (e) {
                 console.error(e);
             }
-        });
+        }));
+        fileProgressText.innerText = "Cancelled!";
+        this.checksums = [];
+    }
+
+    var uploadController = new UploadController(3);
+
+    var fileInput = document.getElementById('file-input');
+    var fileProgressContainer = document.getElementById('file-progress-container');
+    var fileProgressText = fileProgressContainer.querySelector('#file-progress-text');
+    var progressBarsContainer = document.getElementById("progress-bars-container");
+    //var progressContainer = document.getElementById('progress-container');
+    //var progressBar = document.getElementById('progress-bar1');
+    //var progressBar2 = document.getElementById('progress-bar2');
+    //var progressBars = [progressBar, progressBar2];
+    //var progressBarText = document.getElementById('progress-bar-text');
+    //var progressBarText2 = document.getElementById('progress-bar-text2');
+    //var progressBarTexts = [progressBarText, progressBarText2];
+    var submitButton = document.getElementById('submit-button');
+    var cancelButton = document.getElementById('cancel-button');
+    var modal = document.getElementById('modal');
+
+    modal.addEventListener("click", handleModalClick);
+    function handleModalClick(e) {
+        if (e.target !== modal) return;
+        if (uploadController.uploading) {
+            uploadController.SetUploading(!confirm("Cancel Upload?"));
+        }
+        if (uploadController.uploading) return;
+        //cancelUpload();
+        modal.style.display = "none";
+        modal.removeEventListener("click", handleModalClick);
+        //checksum = [];
+    }
+
+    function setIsUploading(uploading) {
+        IS_UPLOADING = uploading;
+        submitButton.disabled = uploading;
+        cancelButton.disabled = !uploading;
+        submitButton.style.display = uploading ? 'none' : 'block';
+        cancelButton.style.display = uploading ? 'block' : 'none';
+    }
+
+    async function cancelUpload() {
+        uploadController.SetUploading(false);
+//        if (!checksum.length) return;
+//        const cancels = checksum.map(chk => new Promise((resolve, reject) => {
+//            try {
+//                const url = "/cancel_upload?filehash=" + encodeURIComponent(chk);
+//                const xhr = new XMLHttpRequest();
+//                xhr.open('POST', url, true);
+//                xhr.onload = () => {
+//                    if (xhr.status === 200) {
+//                        resolve();
+//                    } else {
+//                        reject(new Error(`Failed to cancel upload with code: ${xhr.status}`));
+//                    }
+//                };
+//                xhr.onerror = () => {
+//                    reject(new Error('Network error occurred.'));
+//                };
+//                xhr.send();
+//                fileProgressText = "Cancelled!";
+//                //progressBarText2.innerText = "Cancelled!";
+//                setIsUploading(false);
+//            } catch (e) {
+//                console.error(e);
+//            }
+//        }));
     }
 
     function handleFileInputClick() {
@@ -104,16 +230,15 @@
             document.getElementById('file-size-text').innerText = "";
         }
         submitButton.disabled = !files || files.length === 0;
-        progressContainer.style.display = 'none';
-        setProgress(0);
+        progressBarsContainer.style.display = 'none';
+        //setProgress(0, 0, 0);
+        //setProgress(0, 0, 1);
     }
 
     async function uploadFile() {
         submitButton.disabled = true;
         const files = fileInput.files;
         if (!files || files.length === 0) return;
-        const fileProgressContainer = document.getElementById('file-progress-container');
-        const fileProgressText = fileProgressContainer.querySelector('#file-progress-text');
         const startTime = performance.now();
         try {
             let totalSize = 0;
@@ -123,47 +248,133 @@
             let uploadedSize = 0;
             let completedFiles = 0;
             fileProgressContainer.style.display = 'block';
-            fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
+            fileProgressText.innerText = `${files.length} files remaining.`;
+            uploadController.AddQueue(files);
+            uploadController.SetUploading(true);
 
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                const arrayBuffer = await file.arrayBuffer();
-                const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-                const hashArray = Array.from(new Uint8Array(hashBuffer));
-                checksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+            //const uploads = Array.from(files, (file) => async (index) => {
+                //console.log("Uploading:", file.name);
+                //const arrayBuffer = await file.arrayBuffer();
+                //const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+                //const hashArray = Array.from(new Uint8Array(hashBuffer));
+                //const thisChecksum = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+                //checksum.push(thisChecksum);
+//
+                //fileInput.disabled = true;
+                //submitButton.disabled = true;
+                //cancelButton.style.display = 'block';
+                //submitButton.style.display = 'none';
+                //progressBarsContainer.style.display = 'block';
+                //const progressBar = new ProgressBar();
+//
+                //let start = 0;
+                //const totalChunks = Math.ceil(file.size / chunkSize);
+                //setIsUploading(true);
+//
+                //while (start < file.size && IS_UPLOADING) {
+                    //const end = Math.min(start + chunkSize, file.size);
+                    //const chunk = file.slice(start, end);
+                    //const elapsedTime = (performance.now() - startTime) / 1000;
+                    //const bitrate = ((end / file.size) * file.size) / elapsedTime;
+                    ////setProgress(Math.floor((uploadedSize + ((end / file.size) * file.size)) / totalSize * 100), bitrate, index);
+                    //progressBar.setProgress(Math.floor((start / file.size) * 100), bitrate);
+                    //await uploadChunk(chunk, start, end, totalChunks, thisChecksum, file);
+                    //start = end;
+                //}
+//
+                ////uploadedSize += file.size;
+                //progressBar.remove();
+                //console.log("inside this", this);
+                //return index;
+            //});
+            //const batch = [];
+            //let i = 0;
+            //var finishedIndex = -1;
+            //for (upload in uploads) {
+                //if (batch.length < maxConcurrent) {
+                    //batch.push(uploads[i](batch.length));
+                    //if (batch.length < maxConcurrent) {
+                        //i++;
+                        //continue;
+                    //}
+                //}
+                //const finished = await Promise.race(batch.filter(x => !!x));
+                //console.log("finished now", finished);
+                //finishedIndex = await finished;
+                //console.log("finished:", finishedIndex);
+                //if (finishedIndex !== -1) {
+                    //batch[finishedIndex] = false;
+                //}
+                //completedFiles++;
+                //fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
+            //}
 
-                fileInput.disabled = true;
-                submitButton.disabled = true;
-                cancelButton.style.display = 'block';
-                submitButton.style.display = 'none';
-                progressContainer.style.display = 'block';
 
-                let start = 0;
-                const totalChunks = Math.ceil(file.size / chunkSize);
-                setIsUploading(true);
+            //while (i < uploads.length || batch.length > 0) {
+                //if (batch.length < maxConcurrent && i < uploads.length) {
+                    //batch.push(uploads[i++](batch.length));
+                    //if (batch.length < maxConcurrent) {
+                        //continue;
+                    //}
+                //}
+                //const finished = Promise.any(batch);
+                //finishedIndex = await finished;
+                //if (finishedIndex !== -1) {
+                    //batch.splice(finishedIndex, 1);
+                    //completedFiles++;
+                    //fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
+                //}
+//
+            //}
 
-                while (start < file.size && IS_UPLOADING) {
-                    const end = Math.min(start + chunkSize, file.size);
-                    const chunk = file.slice(start, end);
-                    const elapsedTime = (performance.now() - startTime) / 1000;
-                    const bitrate = (uploadedSize + ((end / file.size) * file.size)) / elapsedTime;
-                    setProgress(Math.floor((uploadedSize + ((end / file.size) * file.size)) / totalSize * 100), bitrate);
-                    await uploadChunk(chunk, start, end, totalChunks, checksum, file);
-                    start = end;
-                }
+            //var processing = true;
+            //while (processing) {
+                //if (batch.length < maxConcurrent) {
+                    //batch.push(uploads[i](batch.length));
+                    //if (batch.length < maxConcurrent) {
+                        //i++;
+                        //continue;
+                    //}
+                //}
+                //const finished = await Promise.race(batch);
+                //console.log("finished now", finished);
+                //finishedIndex = await finished;
+                //console.log("finished:", finishedIndex);
+                //if (finishedIndex !== -1) {
+                    //batch.splice(finishedIndex, 1);
+                //}
+                //completedFiles++;
+                //fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
+                ////processing = i < files.length;
+                //processing = batch.some(x => x !== false);
+            //}
+            //await Promise.all(batch);
 
-                completedFiles++;
-                uploadedSize += file.size;
-                fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
-            }
+            //for (const upload of uploads) {
+                //if (batch.length < maxConcurrent) {
+                    //batch.push(upload(batch.length));
+                    //if (batch.length < maxConcurrent) {
+                        //continue;
+                    //}
+                //}
+                //if (finishedIndex !== -1) {
+                    //batch[finishedIndex] = upload(finishedIndex);
+                //}
+                //const finished = await Promise.any(batch);
+                //finishedIndex = await finished;
+                //completedFiles++;
+                //fileProgressText.innerText = `Uploaded ${completedFiles}/${files.length} files`;
+            //}
+            //Promise.all();
+
         } catch (e) {
             console.error(e);
         } finally {
-            setIsUploading(false);
-            fileInput.value = '';
-            document.getElementById('file-name-text').innerText = "Select Files";
-            document.getElementById('file-size-text').innerText = "";
-            fileProgressContainer.style.display = 'none';
+            //setIsUploading(false);
+            //fileInput.value = '';
+            //document.getElementById('file-name-text').innerText = "Select Files";
+            //document.getElementById('file-size-text').innerText = "";
+            //fileProgressContainer.style.display = 'none';
         }
     }
 
@@ -194,9 +405,10 @@
         }
     }
 
-    function setProgress(value, bitrate) {
-        progressBar.style.width = value + "%";
-        progressBarText.innerHTML = value + `% (${convertFileSize(bitrate)}/s)`;
+    function setProgress(value, bitrate, id) {
+        if (id != 0) return;
+        progressBars[id].style.width = value + "%";
+        progressBarTexts[id].innerHTML = value + `% (${convertFileSize(bitrate)}/s)`;
     }
 
     document.getElementById("modal").style.display = "block";
@@ -210,6 +422,28 @@
         if (size >= MB) return `${(size / MB).toFixed(2)} MB`;
         if (size >= KB) return `${(size / KB).toFixed(2)} KB`;
         return `${size} Bytes`;
+    }
+
+    function ProgressBar() {
+        this.container = document.getElementById('progress-container');
+        this.container = document.createElement('div');
+        this.container.className = "progress-container";
+        progressBarsContainer.appendChild(this.container);
+        this.progressBar = document.createElement('div');
+        this.progressBar.className = "progress-bar";
+        this.container.appendChild(this.progressBar);
+        this.text = document.createElement('span');
+        this.text.className = "progress-bar-text";
+        this.progressBar.appendChild(this.text);
+    }
+    ProgressBar.prototype.setProgress = function(value, bitrate) {
+        this.progressBar.style.width = value + "%";
+        this.text.innerHTML = value + `% (${convertFileSize(bitrate)}/s)`;
+    }
+    ProgressBar.prototype.remove = function() {
+        this.container.removeChild(this.progressBar);
+        delete this.text;
+        delete this.progressBar;
     }
 
 </script>
