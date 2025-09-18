@@ -373,20 +373,45 @@ body {
     margin-top: 10px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 10px;
 }
 
 .progress-container {
+    width: 100%;
+    gap: unset;
+    display: flex;
+    flex-direction: column;
+}
+
+.progress-text-container {
+    display: flex;
+    justify-content: space-between;
+}
+
+.progress-text-name {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-text-speed {
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.progress-bar-container {
     position: relative;
     display: block;
     width: 100%;
     background-color: #ddd;
     border-radius: 25px;
-    margin-top: 10px;
+    /* margin-top: 10px; */
+    /* margin-top: 5px; */
 }
 
 .progress-bar {
-    height: 30px;
+    height: 15px;
     width: 0;
     background-color: #4CAF50;
     text-align: center;
