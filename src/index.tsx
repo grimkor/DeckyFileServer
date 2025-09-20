@@ -42,7 +42,7 @@ const Content: VFC<{
         server_running: false,
         directory: "/home/deck",
         port: 8000,
-        allow_uploads: true,
+        allow_uploads: false,
         ip_address: "127.0.0.1",
         accepted_warning: false,
         history: [],
@@ -246,7 +246,6 @@ const SettingsPage: VFC<{
         }
     };
 
-    // TODO: USE FILE PICKER AND MAKE DIRECTORY TO SHARE FULL WIDTH
     return (
         <ModalRoot onCancel={handleClose}>
             <DialogBody style={{
@@ -272,18 +271,6 @@ const SettingsPage: VFC<{
                             justifyContent: 'center',
                             alignItems: 'center'
                         }}
-                        onPointerDown={() => {
-                            const container = document.getElementById("TESTING123");
-                            console.log("pointerDown",container);
-                        }}
-                        onMouseDown={() => {
-                            const container = document.getElementById("TESTING123");
-                            console.log("pointerDown",container);
-                        }}
-                        onTouchStart={() => {
-                            const container = document.getElementById("TESTING123");
-                            console.log("touchStart",container);
-                        }}
                         onClick={() => {
                             if (ref?.current) {
                                 ref.current.getElementsByTagName('button')[0]?.click();
@@ -292,7 +279,7 @@ const SettingsPage: VFC<{
                     >
                         <FaHistory fontSize={20} />
                     </DialogButton>
-                    <div ref={ref} style={{display: 'none'}} id="TESTING123">
+                    <div ref={ref} style={{display: 'none'}}>
                         <DropdownItem
                             selectedOption={historySelection}
                             label={undefined}

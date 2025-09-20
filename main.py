@@ -112,10 +112,12 @@ class Plugin:
         return port
 
     async def get_uploads_enabled(self):
-        return self.uploads_enabled
+        return settings.getSetting('UPLOAD', False)
 
     async def set_uploads_enabled(self, enabled: bool):
-        self.uploads_enabled = enabled
+        settings.setSetting('UPLOAD', enabled)
+        settings.commit()
+        return enabled
 
     async def get_error(self) -> Union[None, str]:
         return self.error
