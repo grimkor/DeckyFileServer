@@ -1,4 +1,4 @@
-import React, {ChangeEvent, useEffect, useRef, useState, VFC} from 'react';
+import React, { ChangeEvent, useEffect, useRef, useState, VFC } from 'react';
 import {
     ButtonItem,
     definePlugin,
@@ -20,8 +20,8 @@ import {
     Toggle,
     DialogSubHeader,
 } from "decky-frontend-lib";
-import {FaServer, FaHistory} from "react-icons/fa";
-import {IoMdAlert} from "react-icons/io";
+import { FaServer, FaHistory } from "react-icons/fa";
+import { IoMdAlert } from "react-icons/io";
 
 
 interface State {
@@ -33,11 +33,12 @@ interface State {
     error?: string
     accepted_warning: boolean;
     history: string[]
+    disable_thumbnails: boolean;
 }
 
 const Content: VFC<{
     serverAPI: ServerAPI
-}> = ({serverAPI}) => {
+}> = ({ serverAPI }) => {
     const [state, setState] = useState<State>({
         server_running: false,
         directory: "/home/deck",
@@ -46,6 +47,7 @@ const Content: VFC<{
         ip_address: "127.0.0.1",
         accepted_warning: false,
         history: [],
+        disable_thumbnails: false,
     })
 
 
@@ -59,9 +61,9 @@ const Content: VFC<{
     const setServerStatus = async (status: Partial<State>) => {
         const result = await serverAPI.callPluginMethod<{
             status: Partial<State>
-        }, State>("set_status", {status});
+        }, State>("set_status", { status });
         if (result.success) {
-            setState(prevState => ({...prevState, ...result.result}));
+            setState(prevState => ({ ...prevState, ...result.result }));
         } else {
             await getServerStatus()
         }
@@ -74,36 +76,38 @@ const Content: VFC<{
     }, []);
 
     const onToggleEnableServer = async (checked: boolean) => {
-        setState({...state, server_running: checked });
+        setState({ ...state, server_running: checked });
         if (state.accepted_warning) {
-            await setServerStatus({server_running: checked});
+            await setServerStatus({ server_running: checked });
             return;
         }
         const onCancel = async () => {
-            await setServerStatus({server_running: false});
+            await setServerStatus({ server_running: false });
         }
         const onConfirm = async () => {
             serverAPI.callPluginMethod<undefined, undefined>('accept_warning', undefined);
-            return setServerStatus({server_running: checked});
+            return setServerStatus({ server_running: checked });
         }
         if (state.accepted_warning) {
-            await setServerStatus({server_running: checked});
+            await setServerStatus({ server_running: checked });
         } else {
             showModal(<WarningModal onCancel={onCancel} onConfirm={onConfirm} />, window)
         }
     };
 
-    const handleModalSubmit = async (port: number, directory: string, allow_uploads: boolean) => {
+    const handleModalSubmit = async (port: number, directory: string, allow_uploads: boolean, disable_thumbnails: boolean) => {
         setServerStatus({
             port: Number(port),
             directory,
             allow_uploads,
+            disable_thumbnails,
         })
     };
+
     return (
         <PanelSection>
             <PanelSectionRow>
-                <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server"/>
+                <ToggleField checked={state.server_running} onChange={onToggleEnableServer} label="Enable Server" />
                 {state.error ? <div>{state.error}</div> : null}
             </PanelSectionRow>
             <PanelSectionRow>
@@ -116,6 +120,7 @@ const Content: VFC<{
                             directory={state.directory}
                             history={state.history}
                             allow_uploads={state.allow_uploads}
+                            disable_thumbnails={state.disable_thumbnails}
                             serverAPI={serverAPI}
                             handleSubmit={handleModalSubmit}
                         />, window)}
@@ -146,11 +151,11 @@ const Content: VFC<{
     )
 };
 
-const WarningModal = ({closeModal, onCancel, onConfirm}: {
+const WarningModal = ({ closeModal, onCancel, onConfirm }: {
     closeModal?: () => void;
     onCancel: () => void;
     onConfirm: () => Promise<void>;
-    }) => {
+}) => {
 
     const handleCancel = () => {
         onCancel();
@@ -174,9 +179,9 @@ const WarningModal = ({closeModal, onCancel, onConfirm}: {
                 </p>
             </DialogBody>
             <DialogFooter>
-                    <DialogButton onClick={handleConfirm}>
-                        Got it!
-                    </DialogButton>
+                <DialogButton onClick={handleConfirm}>
+                    Got it!
+                </DialogButton>
             </DialogFooter>
         </ModalRoot>
     );
@@ -188,154 +193,173 @@ const SettingsPage: VFC<{
     directory: string;
     history: string[];
     allow_uploads: boolean;
+    disable_thumbnails: boolean;
     serverAPI: ServerAPI
-    handleSubmit: (port: number, destination: string, https: boolean) => Promise<void>;
+    handleSubmit: (
+        port: number,
+        destination: string,
+        allow_uploads: boolean,
+        disable_thumbnails: boolean,
+    ) => Promise<void>;
 }> = ({
-        closeModal,
-        port,
-        directory,
-        serverAPI,
-        history,
-        allow_uploads,
-        handleSubmit
-      }) => {
-    const [form, setForm] = useState({
-        port,
-        directory,
-        allow_uploads: allow_uploads,
-    });
-    const [historySelection, setHistory] = useState("none");
-    const [showPortError, setShowPortError] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
-
-    // dropdown element is uncontrolled, force it back on change
-    useEffect(() => {
-        if (historySelection === "") {
-            setHistory("none");            
-        }
-    }, [historySelection]);
-
-    const handleValueChange = (key: string) => (e: ChangeEvent<HTMLInputElement>) => {
-        if (key === 'port' && isNaN(parseInt(e.currentTarget.value))) {
-            return;
-        }
-        setShowPortError(Number(parseInt(e.currentTarget.value)) < 1024);
-        setForm({
-            ...form,
-            [key]: parseInt(e.currentTarget.value),
+    closeModal,
+    port,
+    directory,
+    serverAPI,
+    history,
+    allow_uploads,
+    disable_thumbnails,
+    handleSubmit
+}) => {
+        const [form, setForm] = useState({
+            port,
+            directory,
+            allow_uploads,
+            disable_thumbnails,
         });
-    };
-    const handleDestinationClick = async (e: React.MouseEvent<HTMLElement>) => {
-        e.stopPropagation();
-        e.preventDefault();
-        const file = await serverAPI.openFilePicker(directory, false);
-        if (file.path) {
+        const [historySelection, setHistory] = useState("none");
+        const [showPortError, setShowPortError] = useState(false);
+        const ref = useRef<HTMLDivElement>(null);
+
+        // dropdown element is uncontrolled, force it back on change
+        useEffect(() => {
+            if (historySelection === "") {
+                setHistory("none");
+            }
+        }, [historySelection]);
+
+        const handleValueChange = (key: string) => (e: ChangeEvent<HTMLInputElement>) => {
+            if (key === 'port' && isNaN(parseInt(e.currentTarget.value))) {
+                return;
+            }
+            setShowPortError(Number(parseInt(e.currentTarget.value)) < 1024);
             setForm({
                 ...form,
-                directory: file.path
+                [key]: parseInt(e.currentTarget.value),
             });
-        }
-    };
-    const handleClose = () => {
-        // check port is a number between 1024-65535 before closing
-        if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
-            handleSubmit(form.port, form.directory, form.allow_uploads);
-            closeModal?.();
-        } else {
-            setShowPortError(true);
-        }
-    };
+        };
+        const handleDestinationClick = async (e: React.MouseEvent<HTMLElement>) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const file = await serverAPI.openFilePicker(directory, false);
+            if (file.path) {
+                setForm({
+                    ...form,
+                    directory: file.path
+                });
+            }
+        };
+        const handleClose = () => {
+            // check port is a number between 1024-65535 before closing
+            if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
+                handleSubmit(form.port, form.directory, form.allow_uploads, form.disable_thumbnails);
+                closeModal?.();
+            } else {
+                setShowPortError(true);
+            }
+        };
 
-    return (
-        <ModalRoot onCancel={handleClose}>
-            <DialogBody style={{
-                display: 'flex',
-                flexDirection: 'column',
-                height: '100%',
-            }}>
-                <DialogSubHeader>Directory to share</DialogSubHeader>
-                <Focusable flow-children='right' style={{ display: 'flex', flex: 1, gap: 8 }}>
-                    <DialogButton 
-                        // @ts-ignore
-                        onClick={handleDestinationClick}
-                        style={{ flex: 1, textAlign: "left" }}
-                    >
-                        {form.directory}
-                    </DialogButton>
-                    <DialogButton
-                        style={{
-                            minWidth: 'fit-content',
-                            width: 0,
-                            padding: '20px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center'
-                        }}
-                        onClick={() => {
-                            if (ref?.current) {
-                                ref.current.getElementsByTagName('button')[0]?.click();
-                            }
-                        }}
-                    >
-                        <FaHistory fontSize={20} />
-                    </DialogButton>
-                    <div ref={ref} style={{display: 'none'}}>
-                        <DropdownItem
-                            selectedOption={historySelection}
-                            label={undefined}
-                            strDefaultLabel={undefined}
-                            onChange={sel => {
-                                if (sel.data === "none") {
-                                    return;
+        return (
+            <ModalRoot onCancel={handleClose}>
+                <DialogBody style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: '100%',
+                }}>
+                    <DialogSubHeader>Directory to share</DialogSubHeader>
+                    <Focusable flow-children='right' style={{ display: 'flex', flex: 1, gap: 8 }}>
+                        <DialogButton
+                            // @ts-ignore
+                            onClick={handleDestinationClick}
+                            style={{ flex: 1, textAlign: "left" }}
+                        >
+                            {form.directory}
+                        </DialogButton>
+                        <DialogButton
+                            style={{
+                                minWidth: 'fit-content',
+                                width: 0,
+                                padding: '20px',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center'
+                            }}
+                            onClick={() => {
+                                if (ref?.current) {
+                                    ref.current.getElementsByTagName('button')[0]?.click();
                                 }
+                            }}
+                        >
+                            <FaHistory fontSize={20} />
+                        </DialogButton>
+                        <div ref={ref} style={{ display: 'none' }}>
+                            <DropdownItem
+                                selectedOption={historySelection}
+                                label={undefined}
+                                strDefaultLabel={undefined}
+                                onChange={sel => {
+                                    if (sel.data === "none") {
+                                        return;
+                                    }
+                                    setForm({
+                                        ...form,
+                                        directory: sel.data,
+                                    });
+                                    setHistory("");
+                                }}
+                                rgOptions={history.map(h => ({ label: h, data: h }))}
+                                bottomSeparator="none"
+
+                            />
+                        </div>
+                    </Focusable>
+                    <DialogSubHeader>Server</DialogSubHeader>
+                    <Field label="Port" icon={showPortError ? <IoMdAlert size={20} color="red" /> : null} bottomSeparator='none'>
+                        <TextField
+                            description="Must be between 1024 and 65535"
+                            style={{
+                                boxSizing: "border-box",
+                                width: 160,
+                                height: 40,
+                                border: showPortError ? '1px red solid' : undefined
+                            }}
+                            value={String(form.port)}
+                            defaultValue={form.port}
+                            onChange={handleValueChange("port")}
+                        />
+                    </Field>
+                    <Field label="Allow Uploads" bottomSeparator='none'>
+                        <Toggle
+                            value={form.allow_uploads}
+                            onChange={(value) =>
                                 setForm({
                                     ...form,
-                                    directory: sel.data,
-                                });
-                                setHistory("");
-                            }}
-                            rgOptions={history.map(h => ({ label: h, data: h }))} 
-                            bottomSeparator="none"
-
+                                    allow_uploads: value,
+                                })
+                            }
                         />
-                    </div>
-                </Focusable>
-                <DialogSubHeader>Server</DialogSubHeader>
-                <Field label="Port" icon={showPortError ? <IoMdAlert size={20} color="red"/> : null} bottomSeparator='none'>
-                    <TextField
-                        description="Must be between 1024 and 65535"
-                        style={{
-                            boxSizing: "border-box",
-                            width: 160,
-                            height: 40,
-                            border: showPortError ? '1px red solid' : undefined
-                        }}
-                        value={String(form.port)}
-                        defaultValue={form.port}
-                        onChange={handleValueChange("port")}
-                    />
-                </Field>
-                <Field label="Allow Uploads" bottomSeparator='none'>
-                    <Toggle
-                        value={form.allow_uploads}
-                        onChange={(value) =>
-                            setForm({
-                                ...form,
-                                allow_uploads: value,
-                            })
-                        }
-                    />
-                </Field>
-            </DialogBody>
-        </ModalRoot>
-    );
-};
+                    </Field>
+                    <Field label="Disable Thumbnails" bottomSeparator='none'>
+                        <Toggle
+                            value={form.disable_thumbnails}
+                            onChange={(value) =>
+                                setForm({
+                                    ...form,
+                                    disable_thumbnails: value,
+                                })
+                            }
+                        />
+                    </Field>
+                </DialogBody>
+            </ModalRoot>
+        );
+    };
 
 export default definePlugin((serverApi: ServerAPI) => {
     return {
         title: <div className={staticClasses.Title}>DeckyFileServer</div>,
-        content: <Content serverAPI={serverApi}/>,
-        icon: <FaServer/>,
+        content: <Content serverAPI={serverApi} />,
+        icon: <FaServer />,
         onDismount() {
         },
     };

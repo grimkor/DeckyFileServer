@@ -23,7 +23,6 @@ class Plugin:
     server_running = False
     _watchdog_task = None
     error: Union[str, None] = None
-    uploads_enabled: bool = False
 
     async def watchdog(self):
         while True:
@@ -59,7 +58,8 @@ class Plugin:
                         await Plugin.get_directory(self),
                         "-p",
                         str(settings.getSetting("PORT")),
-                        ("", "-uploads")[await Plugin.get_uploads_enabled(self)]
+                        ("", "-uploads")[await Plugin.get_uploads_enabled(self)],
+                        ("", "-disablethumbnails")[await Plugin.get_disable_thumbnails(self)]
                     ],
                     stdout=PIPE,
                     stderr=subprocess.STDOUT,
@@ -119,6 +119,14 @@ class Plugin:
         settings.commit()
         return enabled
 
+    async def get_disable_thumbnails(self):
+        return settings.getSetting('DISABLE_THUMBNAILS', False)
+
+    async def set_disable_thumbnails(self, enabled: bool):
+        settings.setSetting('DISABLE_THUMBNAILS', enabled)
+        settings.commit()
+        return enabled
+
     async def get_error(self) -> Union[None, str]:
         return self.error
 
@@ -144,7 +152,8 @@ class Plugin:
             'accepted_warning': await Plugin.get_accepted_warning(self),
             'error': await Plugin.get_error(self),
             'history': await Plugin.get_history(self),
-            'allow_uploads': await Plugin.get_uploads_enabled(self)
+            'allow_uploads': await Plugin.get_uploads_enabled(self),
+            'disable_thumbnails': await Plugin.get_disable_thumbnails(self)
         }
 
     async def set_status(self, status):
@@ -157,6 +166,8 @@ class Plugin:
                 await Plugin.set_uploads_enabled(self, status['allow_uploads'])
             if 'server_running' in status:
                 await Plugin.set_server_running(self, status['server_running'])
+            if 'disable_thumbnails' in status:
+                await Plugin.set_disable_thumbnails(self, status['disable_thumbnails'])
             return await Plugin.get_status(self)
         except Exception as e:
             decky_plugin.logger.error(f"[set_status]: {e}")
