@@ -227,6 +227,26 @@ body {
     align-items: stretch;
 }
 
+.file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-top: 5px;
+}
+
+.file-size {
+    font-size: 0.9em;
+    color: #666;
+}
+
+.file-progress {
+    font-size: 0.9em;
+    color: #4CAF50;
+}
+
 .file-row {
     display: flex;
     position: relative;
@@ -244,7 +264,6 @@ body {
     overflow: hidden;
 }
 
-/*not last child*/
 .file-row:not(:last-child) {
     border-bottom: #ddd 1px solid;
 }
@@ -326,10 +345,8 @@ body {
     top: 50%;
     transform: translate(-50%, -50%);
     background-color: #fefefe;
-    /*margin: 15% auto;*/
     padding: 20px;
     border: 1px solid #888;
-    /* width: 80%; */
     display: flex;
     overflow: hidden;
 }
@@ -345,22 +362,56 @@ body {
     padding: 20px;
     border: 1px solid #ccc;
     border-radius: 8px;
-    /* min-width: min-content; */
     margin: auto;
     overflow: hidden;
 }
 
-.progress-container {
+.progress-bars-container {
     position: relative;
     display: none;
     width: 100%;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.progress-container {
+    width: 100%;
+    gap: unset;
+    display: flex;
+    flex-direction: column;
+}
+
+.progress-text-container {
+    display: flex;
+    justify-content: space-between;
+}
+
+.progress-text-name {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.progress-text-speed {
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.progress-bar-container {
+    position: relative;
+    display: block;
+    width: 100%;
     background-color: #ddd;
     border-radius: 25px;
-    margin-top: 10px;
+    /* margin-top: 10px; */
+    /* margin-top: 5px; */
 }
 
 .progress-bar {
-    height: 30px;
+    height: 15px;
     width: 0;
     background-color: #4CAF50;
     text-align: center;
@@ -374,6 +425,7 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+    white-space: nowrap;
 }
 
 .file-input-container {
@@ -453,4 +505,55 @@ body {
 .cancel-button:disabled {
     background-color: #ddd;
     cursor: default;
+}
+
+.file-list {
+    position: relative;
+}
+
+.drag-over {
+    background-color: rgba(100, 149, 237, 0.2) !important;
+    border: 2px dashed #6495ED;
+    border-radius: 8px;
+}
+
+.drag-over .file-row {
+    opacity: 0.7;
+}
+
+.drop-target {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(100, 149, 237, 0.1);
+    border: 2px dashed #6495ED;
+    border-radius: 8px;
+    z-index: 1000;
+    pointer-events: none;
+    display: none;
+}
+
+.drop-target.active {
+    display: block;
+}
+
+.dragging {
+    opacity: 0.5;
+    transform: scale(0.98);
+}
+
+.drop-indicator {
+    position: absolute;
+    width: 100%;
+    height: 4px;
+    background-color: #6495ED;
+    border-radius: 2px;
+    z-index: 1001;
+    display: none;
+}
+
+.drop-indicator.active {
+    display: block;
 }
