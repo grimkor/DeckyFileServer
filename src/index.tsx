@@ -28,6 +28,7 @@ interface State {
     server_running: boolean,
     directory: string,
     port: number,
+    timeout: number,
     allow_uploads: boolean,
     ip_address: string,
     error?: string
@@ -36,6 +37,8 @@ interface State {
     disable_thumbnails: boolean;
 }
 
+const TIMEOUT_OPTIONS = [2, 5, 10, 20];
+
 const Content: VFC<{
     serverAPI: ServerAPI
 }> = ({ serverAPI }) => {
@@ -43,6 +46,7 @@ const Content: VFC<{
         server_running: false,
         directory: "/home/deck",
         port: 8000,
+        timeout: 1,
         allow_uploads: false,
         ip_address: "127.0.0.1",
         accepted_warning: false,
@@ -95,9 +99,10 @@ const Content: VFC<{
         }
     };
 
-    const handleModalSubmit = async (port: number, directory: string, allow_uploads: boolean, disable_thumbnails: boolean) => {
+    const handleModalSubmit = async (port: number, timeout: number, directory: string, allow_uploads: boolean, disable_thumbnails: boolean) => {
         setServerStatus({
             port: Number(port),
+            timeout: Number(timeout),
             directory,
             allow_uploads,
             disable_thumbnails,
@@ -117,6 +122,7 @@ const Content: VFC<{
                     onClick={() =>
                         showModal(<SettingsPage
                             port={state.port}
+                            timeout={state.timeout}
                             directory={state.directory}
                             history={state.history}
                             allow_uploads={state.allow_uploads}
@@ -190,6 +196,7 @@ const WarningModal = ({ closeModal, onCancel, onConfirm }: {
 const SettingsPage: VFC<{
     closeModal?: () => void;
     port: number;
+    timeout: number;
     directory: string;
     history: string[];
     allow_uploads: boolean;
@@ -197,6 +204,7 @@ const SettingsPage: VFC<{
     serverAPI: ServerAPI
     handleSubmit: (
         port: number,
+        timeout: number,
         destination: string,
         allow_uploads: boolean,
         disable_thumbnails: boolean,
@@ -204,6 +212,7 @@ const SettingsPage: VFC<{
 }> = ({
     closeModal,
     port,
+    timeout,
     directory,
     serverAPI,
     history,
@@ -213,12 +222,15 @@ const SettingsPage: VFC<{
 }) => {
         const [form, setForm] = useState({
             port,
+            timeout,
             directory,
             allow_uploads,
             disable_thumbnails,
         });
         const [historySelection, setHistory] = useState("none");
         const [showPortError, setShowPortError] = useState(false);
+        const [showCustomTimeout, setShowCustomTimeout] = useState(!TIMEOUT_OPTIONS.includes(timeout));
+        const [customTimeout, setCustomTimeout] = useState(timeout);
         const ref = useRef<HTMLDivElement>(null);
 
         // dropdown element is uncontrolled, force it back on change
@@ -232,7 +244,9 @@ const SettingsPage: VFC<{
             if (key === 'port' && isNaN(parseInt(e.currentTarget.value))) {
                 return;
             }
-            setShowPortError(Number(parseInt(e.currentTarget.value)) < 1024);
+            if (key === 'port') {
+                setShowPortError(Number(parseInt(e.currentTarget.value)) < 1024);
+            }
             setForm({
                 ...form,
                 [key]: parseInt(e.currentTarget.value),
@@ -252,7 +266,13 @@ const SettingsPage: VFC<{
         const handleClose = () => {
             // check port is a number between 1024-65535 before closing
             if (Number(form.port) >= 1024 && Number(form.port) <= 65535) {
-                handleSubmit(form.port, form.directory, form.allow_uploads, form.disable_thumbnails);
+                handleSubmit(
+                  form.port,
+                  form.timeout,
+                  form.directory,
+                  form.allow_uploads,
+                  form.disable_thumbnails
+                );
                 closeModal?.();
             } else {
                 setShowPortError(true);
@@ -309,7 +329,6 @@ const SettingsPage: VFC<{
                                 }}
                                 rgOptions={history.map(h => ({ label: h, data: h }))}
                                 bottomSeparator="none"
-
                             />
                         </div>
                     </Focusable>
@@ -328,6 +347,41 @@ const SettingsPage: VFC<{
                             onChange={handleValueChange("port")}
                         />
                     </Field>
+                    <Field label="Server Timeout (Minutes)" bottomSeparator='none'>
+                        <DropdownItem
+                                selectedOption={showCustomTimeout ? -1 : form.timeout}
+                                label={undefined}
+                                strDefaultLabel={undefined}
+                                onChange={sel => {
+                                    setShowCustomTimeout(sel.data === -1);
+                                    setForm({
+                                        ...form,
+                                        timeout: sel.data === -1 ? customTimeout : sel.data,
+                                    });
+                                }}
+                                rgOptions={[
+                                ...TIMEOUT_OPTIONS.map(x => ({label: x, data: x})),
+                                { label: "Custom", data: -1 },
+                                ]}
+                                bottomSeparator="none"
+                    />
+                    </Field>
+                {showCustomTimeout ? (
+                    <Field label="Custom Timeout (Minutes)" bottomSeparator='none'>
+                        <TextField
+                            style={{ boxSizing: "border-box", width: 100, height: 40 }}
+                            value={String(customTimeout)}
+                            defaultValue={customTimeout}
+                            disabled={!showCustomTimeout}
+                            onChange={(e) => {
+                                const value = Number(e.currentTarget.value);
+                                if (isNaN(value)) return;
+                                setCustomTimeout(value);
+                                handleValueChange("timeout")(e);
+                            }}
+                        />
+                    </Field>
+                ) : null}
                     <Field label="Allow Uploads" bottomSeparator='none'>
                         <Toggle
                             value={form.allow_uploads}
