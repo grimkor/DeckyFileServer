@@ -16,7 +16,7 @@ settings.read()
 
 def is_port_in_use(port: str) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        return s.connect_ex(('localhost', port)) == 0
+        return s.connect_ex(("localhost", port)) == 0
 
 class Plugin:
     backend = None
@@ -58,6 +58,8 @@ class Plugin:
                         await Plugin.get_directory(self),
                         "-p",
                         str(settings.getSetting("PORT")),
+                        "-t",
+                        str(await Plugin.get_timeout(self) * 60),
                         ("", "-uploads")[await Plugin.get_uploads_enabled(self)],
                         ("", "-disablethumbnails")[await Plugin.get_disable_thumbnails(self)]
                     ],
@@ -82,48 +84,56 @@ class Plugin:
         return self.server_running
 
     async def get_history(self) -> List[str]:
-        return settings.getSetting('HISTORY', [])
+        return settings.getSetting("HISTORY", [])
 
     async def set_history(self) -> List[str]:
         history = await Plugin.get_history(self)
         new_entry = await Plugin.get_directory(self)
-        if new_entry == '':
+        if new_entry == "":
             return history
         history = [h for h in history if h != new_entry]
         history.insert(0, new_entry)
-        settings.setSetting('HISTORY', history[:10])
+        settings.setSetting("HISTORY", history[:10])
         settings.commit()
         return history
 
     async def get_directory(self) -> str:
-        return settings.getSetting('DIRECTORY', '')
+        return settings.getSetting("DIRECTORY", "")
 
     async def set_directory(self, directory: str) -> str:
-        settings.setSetting('DIRECTORY', directory)
+        settings.setSetting("DIRECTORY", directory)
         settings.commit()
         return directory
 
     async def get_port(self) -> str:
-        return settings.getSetting('PORT', '')
+        return settings.getSetting("PORT", "")
 
     async def set_port(self, port: int) -> int:
-        settings.setSetting('PORT', int(port))
+        settings.setSetting("PORT", int(port))
         settings.commit()
         return port
 
+    async def get_timeout(self) -> int:
+        return int(settings.getSetting("TIMEOUT", "1"))
+
+    async def set_timeout(self, timeout: int) -> int:
+        settings.setSetting("TIMEOUT", int(timeout))
+        settings.commit()
+        return timeout
+
     async def get_uploads_enabled(self):
-        return settings.getSetting('UPLOAD', False)
+        return settings.getSetting("UPLOAD", False)
 
     async def set_uploads_enabled(self, enabled: bool):
-        settings.setSetting('UPLOAD', enabled)
+        settings.setSetting("UPLOAD", enabled)
         settings.commit()
         return enabled
 
     async def get_disable_thumbnails(self):
-        return settings.getSetting('DISABLE_THUMBNAILS', False)
+        return settings.getSetting("DISABLE_THUMBNAILS", False)
 
     async def set_disable_thumbnails(self, enabled: bool):
-        settings.setSetting('DISABLE_THUMBNAILS', enabled)
+        settings.setSetting("DISABLE_THUMBNAILS", enabled)
         settings.commit()
         return enabled
 
@@ -145,29 +155,32 @@ class Plugin:
 
     async def get_status(self):
         return {
-            'server_running': await Plugin.get_server_running(self),
-            'directory': await Plugin.get_directory(self),
-            'port': await Plugin.get_port(self),
-            'ip_address': await Plugin.get_ip_address(self),
-            'accepted_warning': await Plugin.get_accepted_warning(self),
-            'error': await Plugin.get_error(self),
-            'history': await Plugin.get_history(self),
-            'allow_uploads': await Plugin.get_uploads_enabled(self),
-            'disable_thumbnails': await Plugin.get_disable_thumbnails(self)
+            "server_running": await Plugin.get_server_running(self),
+            "directory": await Plugin.get_directory(self),
+            "port": await Plugin.get_port(self),
+            "timeout": await Plugin.get_timeout(self),
+            "ip_address": await Plugin.get_ip_address(self),
+            "accepted_warning": await Plugin.get_accepted_warning(self),
+            "error": await Plugin.get_error(self),
+            "history": await Plugin.get_history(self),
+            "allow_uploads": await Plugin.get_uploads_enabled(self),
+            "disable_thumbnails": await Plugin.get_disable_thumbnails(self)
         }
 
     async def set_status(self, status):
         try:
-            if 'directory' in status:
-                await Plugin.set_directory(self, status['directory'])
-            if 'port' in status:
-                await Plugin.set_port(self, status['port'])
-            if 'allow_uploads' in status:
-                await Plugin.set_uploads_enabled(self, status['allow_uploads'])
-            if 'server_running' in status:
-                await Plugin.set_server_running(self, status['server_running'])
-            if 'disable_thumbnails' in status:
-                await Plugin.set_disable_thumbnails(self, status['disable_thumbnails'])
+            if "directory" in status:
+                await Plugin.set_directory(self, status["directory"])
+            if "port" in status:
+                await Plugin.set_port(self, status["port"])
+            if "timeout" in status:
+                await Plugin.set_timeout(self, status["timeout"])
+            if "allow_uploads" in status:
+                await Plugin.set_uploads_enabled(self, status["allow_uploads"])
+            if "server_running" in status:
+                await Plugin.set_server_running(self, status["server_running"])
+            if "disable_thumbnails" in status:
+                await Plugin.set_disable_thumbnails(self, status["disable_thumbnails"])
             return await Plugin.get_status(self)
         except Exception as e:
             decky_plugin.logger.error(f"[set_status]: {e}")
@@ -175,11 +188,11 @@ class Plugin:
 
     async def _main(self):
         try:
-            if settings.getSetting('DIRECTORY', '') == '':
-                settings.setSetting('DIRECTORY', decky_plugin.HOME)
+            if settings.getSetting("DIRECTORY", "") == "":
+                settings.setSetting("DIRECTORY", decky_plugin.HOME)
                 settings.commit()
-            if settings.getSetting('PORT', '') == '':
-                settings.setSetting('PORT', 8000)
+            if settings.getSetting("PORT", "") == "":
+                settings.setSetting("PORT", 8000)
                 settings.commit()
             decky_plugin.logger.info("Started DeckyFileServer")
             loop = asyncio.get_event_loop()
