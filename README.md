@@ -1,3 +1,4 @@
+[![Support me on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Me-ff5e5b?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/grimbakor)
 # DeckyFileServer
 
 ## Overview
