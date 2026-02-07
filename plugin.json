@@ -6,6 +6,6 @@
   "publish": {
     "tags": ["root"],
     "description": "A simple on-demand web server that enables remote file browsing, downloads, and uploads via any web browser on the same network.",
-    "image": "https://raw.githubusercontent.com/grimkor/DeckyFileServer/refs/heads/main/assets/header.png"
+    "image": "https://raw.githubusercontent.com/grimkor/DeckyFileServer/refs/heads/main/assets/banner.png"
   }
 }
