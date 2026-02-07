@@ -1,10 +1,11 @@
 {
   "name": "DeckyFileServer",
+  "api_version": 1,
   "author": "Grimbakor",
   "flags": ["_root"],
   "publish": {
     "tags": ["root"],
-    "description": "Plugin that lets you turn on a web server to browse and download files from your Steam Deck.",
-    "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
+    "description": "A simple on-demand web server that enables remote file browsing, downloads, and uploads via any web browser on the same network.",
+    "image": "https://raw.githubusercontent.com/grimkor/DeckyFileServer/refs/heads/main/assets/header.png"
   }
 }
